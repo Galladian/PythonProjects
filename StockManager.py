@@ -5,15 +5,22 @@ try:
     from ctypes import windll, byref, sizeof, c_int
 except:
     pass
+
+# COLOURS
+THEME_BG = "#19233c"        # Main Background
+THEME_DARK = "#121a2d"      # Darker Background (Summary)
+BTN_BLUE = "#1f538d"        # Standard Button
+BTN_RED = "#C53434"         # Reset/Delete Button
+BTN_HOVER = "#14375e"
 #endregion
 
 class App(ctk.CTk):
     def __init__(self):
         # setup
-        super().__init__(fg_color="#19233c")
+        super().__init__(fg_color = THEME_BG)
         self.title("Stock Manager")
-        self.geometry("500x450")
-        self.minsize(500,200)
+        self.geometry("600x500")
+        self.minsize(500,400)
         self.ChangeTitleBar()
 
         # variables
@@ -23,11 +30,28 @@ class App(ctk.CTk):
         self.CreateFrames()
     
     def CreateFrames(self):
+        self.control_frame = ControlFrame(self, self.AddRowCallback, self.UpdateCallback, self.ResetCallback)
+        self.control_frame.place(relx = 0, rely = 0, relwidth = 1.0, relheight = 0.15)
+
+        self.main_frame = MainFrame(self)
+        self.main_frame.place(relx = 0, rely = 0.15, relwidth = 1.0, relheight = 0.7)
+
         self.summary_frame = SummaryFrame(self, self.portfolio_total_string)
         self.summary_frame.place(relx = 0, rely = 0.85, relwidth = 1.0, relheight = 0.15)
 
-        self.main_frame = MainFrame(self)
-        self.main_frame.place(relx = 0, rely = 0, relwidth = 1.0, relheight = 0.85)
+    # callback triggers for control frame buttons
+    def AddRowCallback(self) -> None:
+        '''Triggered when new row required'''
+        self.main_frame.AddRow()
+
+    def UpdateCallback(self) -> None:
+        '''Triggered when tickers need updating'''
+        print("Update logic will be implemented here")
+    
+    def ResetCallback(self) -> None:
+        '''Triggered to clear all rows'''
+        for row in list(self.main_frame.rows_data):
+            self.main_frame.RemoveRow(row)
 
     def ChangeTitleBar(self):
         '''Sync title bar colour (windows only)'''
@@ -41,7 +65,7 @@ class App(ctk.CTk):
 
 class SummaryFrame(ctk.CTkFrame):
     def __init__(self, parent, portfolio_string: str, **kwargs):
-        super().__init__(parent, fg_color="#121a2d", **kwargs)
+        super().__init__(parent, fg_color = THEME_DARK, **kwargs)
 
         self.total_label = ctk.CTkLabel(
             self,
@@ -55,7 +79,6 @@ class SummaryFrame(ctk.CTkFrame):
         '''Method to modify total'''
         self.total_label.configure(text = f"Total: ${amount:,.2f}")
 
-#region MAINFRAME
 class MainFrame(ctk.CTkScrollableFrame):
     def __init__(self, parent, **kwargs):
         super().__init__(parent, fg_color = "transparent", corner_radius = 0, **kwargs)
@@ -93,7 +116,7 @@ class MainFrame(ctk.CTkScrollableFrame):
     
     def RemoveRow(self, row_dict: dict) -> None:
         '''Allows the removal of an existing row'''
-        for widget in self.row_dict.values():
+        for widget in row_dict.values():
             widget.destroy()
         self.rows_data.remove(row_dict)
         self.RefreshGrid()
@@ -109,8 +132,42 @@ class MainFrame(ctk.CTkScrollableFrame):
             row["delete"].grid(row = index, column = 5)
             
             # Update the visual row number
-            row["num"].configure(text=str(index + 1))
-#endregion
+            row["num"].configure(text = str(index + 1))
+
+class ControlFrame(ctk.CTkFrame):
+    def __init__(self, parent, add_command, update_command, reset_command, **kwargs):
+        super().__init__(parent, fg_color = "transparent", **kwargs)
+
+        # Setup Grid for even spacing
+        self.grid_columnconfigure((0, 1, 2, 3), weight = 1)
+        self.grid_rowconfigure(0, weight = 1)
+
+        # settings widgets
+        self.button_add = ctk.CTkButton(
+            self, text = "+ Add Row", fg_color = BTN_BLUE, hover_color = BTN_HOVER, 
+            command = add_command  
+        )
+        self.button_add.grid(row = 0, column = 0, padx = 5)
+
+        # 2. Update Button
+        self.button_update = ctk.CTkButton(
+            self, text = "Update", fg_color = BTN_BLUE, hover_color = BTN_HOVER, 
+            command = update_command
+        )
+        self.button_update.grid(row = 0, column = 1, padx = 5)
+
+        # 3. NZD Switch
+        self.switch_currency = ctk.CTkSwitch(
+            self, text = "NZD", progress_color = BTN_BLUE, text_color = "white"
+        )
+        self.switch_currency.grid(row = 0, column = 2, padx = 5)
+
+        # 4. Reset Button
+        self.button_reset = ctk.CTkButton(
+            self, text = "Reset", fg_color = BTN_RED, hover_color = "#8a2424", width = 80,
+            command = reset_command
+        )
+        self.button_reset.grid(row = 0, column = 3, padx = 5)
 
 if __name__ == "__main__":
     app = App()
