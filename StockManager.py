@@ -1,6 +1,7 @@
 #region imports
 import customtkinter as ctk
 import yfinance as yf
+import threading
 try:
     from ctypes import windll, byref, sizeof, c_int
 except:
@@ -30,6 +31,7 @@ class App(ctk.CTk):
         self.CreateFrames()
     
     def CreateFrames(self):
+        '''Adds frame widgets onto window'''
         self.control_frame = ControlFrame(self, self.AddRowCallback, self.UpdateCallback, self.ResetCallback)
         self.control_frame.place(relx = 0, rely = 0, relwidth = 1.0, relheight = 0.15)
 
@@ -44,14 +46,57 @@ class App(ctk.CTk):
         '''Triggered when new row required'''
         self.main_frame.AddRow()
 
-    def UpdateCallback(self) -> None:
-        '''Triggered when tickers need updating'''
-        print("Update logic will be implemented here")
-    
     def ResetCallback(self) -> None:
         '''Triggered to clear all rows'''
-        for row in list(self.main_frame.rows_data):
-            self.main_frame.RemoveRow(row)
+        for row_dict in self.main_frame.rows_data:
+            for widget in row_dict.values():
+                widget.destroy()
+        
+        self.main_frame.rows_data.clear()
+
+        # Only one layout recalculation needed
+        self.main_frame.RefreshGrid() 
+    
+    def UpdateCallback(self) -> None:
+        '''Triggered when tickers need updating'''
+        tickers = [row["ticker"].get().strip().upper() for row in self.main_frame.rows_data if row["ticker"].get()]
+        if not tickers: 
+            return
+        
+        threading.Thread(target = self.FetchPrices, args = (tickers,), daemon = True).start()
+
+    def FetchPrices(self, tickers: list) -> list:
+        '''Background task to fetch data and update UI'''
+        try:
+            # retrieves most recent data
+            data = yf.download(tickers, period = "1d", interval = "1m", progress = False)
+            prices = data['Close'].iloc[-1]
+            self.after(0, lambda: self.ApplyPricesToUI(prices))
+        except Exception as e:
+            print(f"Error fetching data: {e}")
+    
+    def ApplyPricesToUI(self, prices_data: list) -> None:
+        '''Pushes values onto associated widgets'''
+        grand_total = 0.0
+
+        for row in self.main_frame.rows_data:
+            ticker = row["ticker"].get().strip().upper()
+
+            if ticker in prices_data:
+                # gathers and displays appropriate data
+                price = prices_data if isinstance(prices_data, float) else prices_data[ticker]
+                row["price"].configure(text = f"${price:,.2f}")
+
+                # fill row data
+                try:
+                    quantity = float(row["amount"].get()) if row["amount"].get() else 0.0
+                    row_total = price * quantity
+                    row["total"].configure(text = f"${row_total:,.2f}")
+                    grand_total += row_total
+                except ValueError:
+                    pass # skip for invalid 
+
+            self.summary_frame.UpdateTotal(grand_total)
 
     def ChangeTitleBar(self):
         '''Sync title bar colour (windows only)'''
@@ -135,7 +180,7 @@ class MainFrame(ctk.CTkScrollableFrame):
             row["num"].configure(text = str(index + 1))
 
 class ControlFrame(ctk.CTkFrame):
-    def __init__(self, parent, add_command, update_command, reset_command, **kwargs):
+    def __init__(self, parent, add_command: function, update_command: function, reset_command: function, **kwargs):
         super().__init__(parent, fg_color = "transparent", **kwargs)
 
         # Setup Grid for even spacing
