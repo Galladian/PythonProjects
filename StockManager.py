@@ -25,6 +25,9 @@ class App(ctk.CTk):
         self.minsize(500,400)
         self.ChangeTitleBar()
 
+        self.exchange_rate = 1.0
+        self.last_prices = (None, None)
+
         # widgets
         self.CreateFrames()
         self.LoadData()
@@ -34,7 +37,7 @@ class App(ctk.CTk):
     
     def CreateFrames(self):
         '''Adds frame widgets onto window'''
-        self.control_frame = ControlFrame(self, self.AddRowCallback, self.UpdateCallback, self.ResetCallback)
+        self.control_frame = ControlFrame(self, self.AddRowCallback, self.UpdateCallback, self.ResetCallback, self.ToggleCallback)
         self.control_frame.place(relx = 0, rely = 0, relwidth = 1.0, relheight = 0.15)
 
         self.main_frame = MainFrame(self)
@@ -58,7 +61,16 @@ class App(ctk.CTk):
 
         # Only one layout recalculation needed
         self.main_frame.RefreshGrid() 
-    
+
+    def ToggleCallback(self) -> None:
+        '''Called when switch is flipped or for fresh data'''
+        if self.last_prices is None: return
+
+        is_nzd = self.control_frame.currency_var.get() == "NZD"
+        multiplier = self.exchange_rate if is_nzd else 1.0
+
+        self.ApplyPricesToUI(self.last_prices[0], self.last_prices[1], multiplier)
+
     def UpdateCallback(self) -> None:
         '''Triggered when tickers need updating'''
         tickers = [row["ticker"].get().strip().upper() for row in self.main_frame.rows_data if row["ticker"].get()]
@@ -67,29 +79,33 @@ class App(ctk.CTk):
         
         threading.Thread(target = self.FetchPrices, args = (tickers,), daemon = True).start()
 
-    def FetchPrices(self, tickers: list) -> list:
+    def FetchPrices(self, tickers: list) -> None:
         '''Background task to fetch data and update UI'''
         try:
             # retrieves most recent data
-            data = yf.download(tickers, period = "2d", interval = "1d", progress = False, prepost = True)
-            previous_prices = data['Close'].iloc[0]
-            current_prices = data['Close'].iloc[-1]
-            self.after(0, lambda: self.ApplyPricesToUI(previous_prices, current_prices))
+            data = yf.download(tickers + ["NZD=X"], period = "2d", interval = "1d", progress = False, prepost = True)
+            close_data = data['Close'].ffill() 
+
+            # 2. Assign the rows
+            self.last_prices = (close_data.iloc[0], close_data.iloc[-1])
+            self.exchange_rate = float(self.last_prices[1]["NZD=X"])
+            self.after(0, lambda: self.ToggleCallback())
         except Exception as e:
             print(f"Error fetching data: {e}")
     
-    def ApplyPricesToUI(self, prev_prices: list, current_prices: list) -> None:
+    def ApplyPricesToUI(self, prev_prices: list, current_prices: list, multiplier: float = 1.0) -> None:
         '''Pushes values onto associated widgets'''
         total_value = 0.0
         total_change = 0.0
+        currency_sym = "NZ$" if multiplier != 1.0 else "$"
 
         for row in self.main_frame.rows_data:
             ticker = row["ticker"].get().strip().upper()
 
             if ticker in current_prices:
                 # gathers and displays appropriate data
-                price = current_prices[ticker]
-                prev_close = prev_prices[ticker]
+                price = current_prices[ticker] * multiplier
+                prev_close = prev_prices[ticker] * multiplier
                 quantity = float(row["amount"].get() or 0)
 
                 change = ((price - prev_close) / prev_close) * 100
@@ -99,13 +115,11 @@ class App(ctk.CTk):
 
                 # update row info
                 row_total = price * quantity
-                row["price"].configure(text = f"${price:,.2f}")
-                row["total"].configure(text = f"${row_total:,.2f}")
-                row["change"].configure(text = f"{prefix}${abs(quantity_change):,.2f} ({change:+.2f}%)", text_color = colour)
+                row["price"].configure(text = f"{currency_sym}{price:,.2f}")
+                row["total"].configure(text = f"{currency_sym}{row_total:,.2f}")
+                row["change"].configure(text = f"{prefix}{currency_sym}{abs(quantity_change):,.2f} ({change:+.2f}%)", text_color = colour)
                 total_value += row_total
                 total_change += (price - prev_close) * quantity
-            else:
-                row["total"].configure(text = "NULL")
 
             self.summary_frame.UpdateSummary(total_value, total_change)
 
@@ -271,39 +285,44 @@ class MainFrame(ctk.CTkScrollableFrame):
             return False
 
 class ControlFrame(ctk.CTkFrame):
-    def __init__(self, parent, add_command: function, update_command: function, reset_command: function, **kwargs):
+    def __init__(self, parent, add_command: function, update_command: function, reset_command: function, toggle_command: function, **kwargs):
         super().__init__(parent, fg_color = "transparent", **kwargs)
 
-        # Setup Grid for even spacing
+        # Setup
+        self.currency_var = ctk.StringVar(value="USD")
         self.grid_columnconfigure((0, 1, 2, 3), weight = 1)
         self.grid_rowconfigure(0, weight = 1)
 
-        # settings widgets
+        # setting widgets
         self.button_add = ctk.CTkButton(
             self, text = "+ Add Row", fg_color = BTN_BLUE, hover_color = BTN_HOVER, 
             command = add_command  
         )
         self.button_add.grid(row = 0, column = 0, padx = 5)
 
-        # 2. Update Button
         self.button_update = ctk.CTkButton(
             self, text = "Update", fg_color = BTN_BLUE, hover_color = BTN_HOVER, 
             command = update_command
         )
         self.button_update.grid(row = 0, column = 1, padx = 5)
 
-        # 3. NZD Switch
         self.switch_currency = ctk.CTkSwitch(
-            self, text = "NZD", progress_color = BTN_BLUE, text_color = "white"
+            self, 
+            text = "NZD/USD",
+            variable = self.currency_var, 
+            command = toggle_command,
+            progress_color = BTN_BLUE, 
+            onvalue = "NZD", offvalue = "USD",
+            text_color = "white"
         )
         self.switch_currency.grid(row = 0, column = 2, padx = 5)
 
-        # 4. Reset Button
         self.button_reset = ctk.CTkButton(
             self, text = "Reset", fg_color = BTN_RED, hover_color = "#8a2424", width = 80,
             command = reset_command
         )
         self.button_reset.grid(row = 0, column = 3, padx = 5)
+    
 #endregion
 
 if __name__ == "__main__":

@@ -1,6 +1,50 @@
 [
     {
-        "ticker": "NVDA",
-        "amount": "4"
+        "ticker": "META",
+        "amount": "9"
+    },
+    {
+        "ticker": "AMD",
+        "amount": "25"
+    },
+    {
+        "ticker": "GOOGL",
+        "amount": "15"
+    },
+    {
+        "ticker": "AMZN",
+        "amount": "20"
+    },
+    {
+        "ticker": "SOFI",
+        "amount": "150"
+    },
+    {
+        "ticker": "CAKE",
+        "amount": "40"
+    },
+    {
+        "ticker": "UBER",
+        "amount": "32"
+    },
+    {
+        "ticker": "ELF",
+        "amount": "23"
+    },
+    {
+        "ticker": "SLV",
+        "amount": "25"
+    },
+    {
+        "ticker": "HIMS",
+        "amount": "55"
+    },
+    {
+        "ticker": "CRM",
+        "amount": "7"
+    },
+    {
+        "ticker": "NFLX",
+        "amount": "10"
     }
 ]
