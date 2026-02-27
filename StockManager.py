@@ -3,6 +3,7 @@ import customtkinter as ctk
 import yfinance as yf
 import threading
 import json 
+from tksheet import Sheet
 try:
     from ctypes import windll, byref, sizeof, c_int
 except:
@@ -196,9 +197,10 @@ class SummaryFrame(ctk.CTkFrame):
         # change label config
         colour = "#0F9D58" if change >= 0 else "#DB4437"
         prefix = "+" if change >= 0 else ""
+        prefix_value = "+" if change >= 0 else "-"
         percent = (change / (total_amount - change) * 100) if total_amount != change else 0
         self.change_label.configure(
-            text = f"Day Change: {prefix}${change:,.2f} ({prefix}{percent:.2f}%)", 
+            text = f"Day Change: {prefix_value}${abs(change):,.2f} ({prefix}{percent:.2f}%)", 
             text_color = colour
         )
 
@@ -206,7 +208,7 @@ class MainFrame(ctk.CTkScrollableFrame):
     def __init__(self, parent, **kwargs):
         super().__init__(parent, fg_color = "transparent", corner_radius = 0, **kwargs)
 
-        self.grid_columnconfigure((1, 3, 5), weight = 1) #ticker and quantity have expansive nature
+        self.grid_columnconfigure((1, 3, 5), weight = 0) #ticker and quantity have expansive nature
         self.grid_columnconfigure((0, 2, 4, 6), weight = 0)
         self.rows_data = []
     
