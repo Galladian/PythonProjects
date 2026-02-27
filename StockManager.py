@@ -1,7 +1,8 @@
-#region imports
+#region IMPORTS
 import customtkinter as ctk
 import yfinance as yf
 import threading
+import json 
 try:
     from ctypes import windll, byref, sizeof, c_int
 except:
@@ -26,6 +27,10 @@ class App(ctk.CTk):
 
         # widgets
         self.CreateFrames()
+        self.LoadData()
+
+        # detection
+        self.protocol("WM_DELETE_WINDOW", self.OnClose)
     
     def CreateFrames(self):
         '''Adds frame widgets onto window'''
@@ -38,7 +43,7 @@ class App(ctk.CTk):
         self.summary_frame = SummaryFrame(self)
         self.summary_frame.place(relx = 0, rely = 0.85, relwidth = 1.0, relheight = 0.15)
 
-    # callback triggers for control frame buttons
+    # CALLBACK FUNCTIONS
     def AddRowCallback(self) -> None:
         '''Triggered when new row required'''
         self.main_frame.AddRow()
@@ -90,13 +95,13 @@ class App(ctk.CTk):
                 change = ((price - prev_close) / prev_close) * 100
                 quantity_change = (price - prev_close) * quantity
                 colour = "#0F9D58" if quantity_change >= 0 else "#DB4437"
-                prefix = "+" if change >= 0 else ""
+                prefix = "+" if change >= 0 else "-"
 
                 # update row info
                 row_total = price * quantity
                 row["price"].configure(text = f"${price:,.2f}")
                 row["total"].configure(text = f"${row_total:,.2f}")
-                row["change"].configure(text = f"{prefix}${quantity_change:+.2f} ({change:+.2f}%)", text_color = colour)
+                row["change"].configure(text = f"{prefix}${abs(quantity_change):,.2f} ({change:+.2f}%)", text_color = colour)
                 total_value += row_total
                 total_change += (price - prev_close) * quantity
             else:
@@ -104,7 +109,42 @@ class App(ctk.CTk):
 
             self.summary_frame.UpdateSummary(total_value, total_change)
 
-    def ChangeTitleBar(self):
+    # DATA FUNCTIONS
+    def OnClose(self) -> None:
+        '''Executes when application is closed'''
+        self.SaveData()
+        self.destroy()
+
+    def SaveData(self) -> None:
+        '''Extract tickers and quantity'''
+        saved_data = []
+        for row in self.main_frame.rows_data:
+            saved_data.append({
+                "ticker": row["ticker"].get(),
+                "amount": row["amount"].get() 
+            })
+        with open("portfolio.json", "w") as file:
+            json.dump(saved_data, file, indent = 4)
+
+    def LoadData(self) -> None:
+        '''Extracts saved data, loading it'''
+        try:
+            with open("portfolio.json", "r") as file:
+                saved_data = json.load(file)
+
+                # feeds data using existing architecture
+                for item in saved_data:
+                    self.main_frame.AddRow()
+
+                    new_row = self.main_frame.rows_data[-1]
+                    new_row["ticker"].insert(0, item["ticker"])
+                    new_row["amount"].insert(0, item["amount"])
+            
+            self.UpdateCallback()
+        except FileNotFoundError:
+            pass # no current file save
+
+    def ChangeTitleBar(self) -> None:
         '''Sync title bar colour (windows only)'''
         try:
             HWND = windll.user32.GetParent(self.winfo_id())
@@ -114,6 +154,7 @@ class App(ctk.CTk):
         except:
             pass
 
+#region FRAMES
 class SummaryFrame(ctk.CTkFrame):
     def __init__(self, parent, **kwargs):
         super().__init__(parent, fg_color = THEME_DARK, **kwargs)
@@ -151,8 +192,8 @@ class MainFrame(ctk.CTkScrollableFrame):
     def __init__(self, parent, **kwargs):
         super().__init__(parent, fg_color = "transparent", corner_radius = 0, **kwargs)
 
-        self.grid_columnconfigure((1, 3), weight = 1) #ticker and quantity have expansive nature
-        self.grid_columnconfigure((0, 2, 4, 5, 6), weight = 0)
+        self.grid_columnconfigure((1, 3, 5), weight = 1) #ticker and quantity have expansive nature
+        self.grid_columnconfigure((0, 2, 4, 6), weight = 0)
         self.rows_data = []
     
     def AddRow(self) -> None:
@@ -164,7 +205,7 @@ class MainFrame(ctk.CTkScrollableFrame):
         row_dictionary["num"] = ctk.CTkLabel(self, text = f"{index + 1}", width = 30)
         row_dictionary["num"].grid(row = index, column = 0, padx = 5, pady = 5)
 
-        row_dictionary["ticker"] = ctk.CTkEntry(self, placeholder_text = "Ticker", width = 120)
+        row_dictionary["ticker"] = ctk.CTkEntry(self, placeholder_text = "Ticker", width = 70)
         row_dictionary["ticker"].grid(row=index, column = 1, padx = 5, pady = 5, sticky = "ew")
 
         row_dictionary["price"] = ctk.CTkLabel(self, text = "$0.00", width = 80)
@@ -263,6 +304,7 @@ class ControlFrame(ctk.CTkFrame):
             command = reset_command
         )
         self.button_reset.grid(row = 0, column = 3, padx = 5)
+#endregion
 
 if __name__ == "__main__":
     app = App()
