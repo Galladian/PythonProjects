@@ -87,10 +87,16 @@ class App(ctk.CTk):
                 prev_close = prev_prices[ticker]
                 quantity = float(row["amount"].get() or 0)
 
+                change = ((price - prev_close) / prev_close) * 100
+                quantity_change = (price - prev_close) * quantity
+                colour = "#0F9D58" if quantity_change >= 0 else "#DB4437"
+                prefix = "+" if change >= 0 else ""
+
+                # update row info
                 row_total = price * quantity
                 row["price"].configure(text = f"${price:,.2f}")
                 row["total"].configure(text = f"${row_total:,.2f}")
-
+                row["change"].configure(text = f"{prefix}${quantity_change:+.2f} ({change:+.2f}%)", text_color = colour)
                 total_value += row_total
                 total_change += (price - prev_close) * quantity
             else:
@@ -146,7 +152,7 @@ class MainFrame(ctk.CTkScrollableFrame):
         super().__init__(parent, fg_color = "transparent", corner_radius = 0, **kwargs)
 
         self.grid_columnconfigure((1, 3), weight = 1) #ticker and quantity have expansive nature
-        self.grid_columnconfigure((0, 2, 4, 5), weight = 0)
+        self.grid_columnconfigure((0, 2, 4, 5, 6), weight = 0)
         self.rows_data = []
     
     def AddRow(self) -> None:
@@ -176,9 +182,17 @@ class MainFrame(ctk.CTkScrollableFrame):
         row_dictionary["total"] = ctk.CTkLabel(self, text = "$0.00", width = 80)
         row_dictionary["total"].grid(row = index, column = 4, padx = 5, pady = 5)
 
-        row_dictionary["delete"] = ctk.CTkButton(self, text="-", width=30, fg_color="#1f538d",
-                                command = lambda: self.RemoveRow(row_dictionary))
-        row_dictionary["delete"].grid(row = index, column = 5, padx = 5, pady = 5)
+        row_dictionary["change"] = ctk.CTkLabel(self, text = "0.00%", width = 70, text_color = "gray")
+        row_dictionary["change"].grid(row = index, column = 5, padx = 5, pady = 5)
+
+        row_dictionary["delete"] = ctk.CTkButton(
+            self, 
+            text = "-", 
+            width = 30, 
+            fg_color = BTN_BLUE,
+            command = lambda: self.RemoveRow(row_dictionary)
+        )
+        row_dictionary["delete"].grid(row = index, column = 6, padx = 5, pady = 5)
 
         # Store references so we can access their data later
         self.rows_data.append(row_dictionary)
