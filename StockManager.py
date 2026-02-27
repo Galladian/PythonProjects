@@ -24,9 +24,6 @@ class App(ctk.CTk):
         self.minsize(500,400)
         self.ChangeTitleBar()
 
-        # variables
-        self.portfolio_total_string = ctk.StringVar(value = "Total: $0.00")
-
         # widgets
         self.CreateFrames()
     
@@ -38,7 +35,7 @@ class App(ctk.CTk):
         self.main_frame = MainFrame(self)
         self.main_frame.place(relx = 0, rely = 0.15, relwidth = 1.0, relheight = 0.7)
 
-        self.summary_frame = SummaryFrame(self, self.portfolio_total_string)
+        self.summary_frame = SummaryFrame(self)
         self.summary_frame.place(relx = 0, rely = 0.85, relwidth = 1.0, relheight = 0.15)
 
     # callback triggers for control frame buttons
@@ -69,34 +66,37 @@ class App(ctk.CTk):
         '''Background task to fetch data and update UI'''
         try:
             # retrieves most recent data
-            data = yf.download(tickers, period = "1d", interval = "1m", progress = False)
-            prices = data['Close'].iloc[-1]
-            self.after(0, lambda: self.ApplyPricesToUI(prices))
+            data = yf.download(tickers, period = "2d", interval = "1d", progress = False, prepost = True)
+            previous_prices = data['Close'].iloc[0]
+            current_prices = data['Close'].iloc[-1]
+            self.after(0, lambda: self.ApplyPricesToUI(previous_prices, current_prices))
         except Exception as e:
             print(f"Error fetching data: {e}")
     
-    def ApplyPricesToUI(self, prices_data: list) -> None:
+    def ApplyPricesToUI(self, prev_prices: list, current_prices: list) -> None:
         '''Pushes values onto associated widgets'''
-        grand_total = 0.0
+        total_value = 0.0
+        total_change = 0.0
 
         for row in self.main_frame.rows_data:
             ticker = row["ticker"].get().strip().upper()
 
-            if ticker in prices_data:
+            if ticker in current_prices:
                 # gathers and displays appropriate data
-                price = prices_data if isinstance(prices_data, float) else prices_data[ticker]
+                price = current_prices[ticker]
+                prev_close = prev_prices[ticker]
+                quantity = float(row["amount"].get() or 0)
+
+                row_total = price * quantity
                 row["price"].configure(text = f"${price:,.2f}")
+                row["total"].configure(text = f"${row_total:,.2f}")
 
-                # fill row data
-                try:
-                    quantity = float(row["amount"].get()) if row["amount"].get() else 0.0
-                    row_total = price * quantity
-                    row["total"].configure(text = f"${row_total:,.2f}")
-                    grand_total += row_total
-                except ValueError:
-                    pass # skip for invalid 
+                total_value += row_total
+                total_change += (price - prev_close) * quantity
+            else:
+                row["total"].configure(text = "NULL")
 
-            self.summary_frame.UpdateTotal(grand_total)
+            self.summary_frame.UpdateSummary(total_value, total_change)
 
     def ChangeTitleBar(self):
         '''Sync title bar colour (windows only)'''
@@ -109,20 +109,37 @@ class App(ctk.CTk):
             pass
 
 class SummaryFrame(ctk.CTkFrame):
-    def __init__(self, parent, portfolio_string: str, **kwargs):
+    def __init__(self, parent, **kwargs):
         super().__init__(parent, fg_color = THEME_DARK, **kwargs)
 
         self.total_label = ctk.CTkLabel(
             self,
-            textvariable = portfolio_string,
-            font=("Helvetica", 14, "bold"),
-            text_color="white"
+            text = "Total: $0.00",
+            font = ("Helvetica", 20, "bold"),
+            text_color = "white"
         )
-        self.total_label.pack(expand=True)
+        self.total_label.pack(expand = True, pady = (5, 0))
+
+        self.change_label = ctk.CTkLabel(
+            self,
+            text = "$Day change: $0.00 (0.00%)",
+            font = ("Helvetica", 12, "bold"),
+            text_color = "gray"
+        )
+        self.change_label.pack(expand = True, pady = (0, 10)) 
     
-    def UpdateTotal(self, amount: float):
-        '''Method to modify total'''
-        self.total_label.configure(text = f"Total: ${amount:,.2f}")
+    def UpdateSummary(self, total_amount: float, change: float):
+        '''Method to modify total and conigure profit/loss'''
+        self.total_label.configure(text = f"Total: ${total_amount:,.2f}")
+
+        # change label config
+        colour = "#0F9D58" if change >= 0 else "#DB4437"
+        prefix = "+" if change >= 0 else ""
+        percent = (change / (total_amount - change) * 100) if total_amount != change else 0
+        self.change_label.configure(
+            text = f"Day Change: {prefix}${change:,.2f} ({prefix}{percent:.2f}%)", 
+            text_color = colour
+        )
 
 class MainFrame(ctk.CTkScrollableFrame):
     def __init__(self, parent, **kwargs):
@@ -134,6 +151,7 @@ class MainFrame(ctk.CTkScrollableFrame):
     
     def AddRow(self) -> None:
         '''Allows the addition of a new row'''
+        vcmd = (self.register(self.ValidateNumber), '%P') 
         index = len(self.rows_data)
         row_dictionary = {}
 
@@ -146,7 +164,13 @@ class MainFrame(ctk.CTkScrollableFrame):
         row_dictionary["price"] = ctk.CTkLabel(self, text = "$0.00", width = 80)
         row_dictionary["price"].grid(row = index, column = 2, padx = 5, pady = 5)
 
-        row_dictionary["amount"] = ctk.CTkEntry(self, placeholder_text="0.0", width=80)
+        row_dictionary["amount"] = ctk.CTkEntry(
+            self, 
+            placeholder_text = "0.0", 
+            width = 80,
+            validate = "key",
+            validatecommand = vcmd
+        )
         row_dictionary["amount"].grid(row = index, column = 3, padx = 5, pady = 5, sticky = "ew")
 
         row_dictionary["total"] = ctk.CTkLabel(self, text = "$0.00", width = 80)
@@ -166,7 +190,7 @@ class MainFrame(ctk.CTkScrollableFrame):
         self.rows_data.remove(row_dict)
         self.RefreshGrid()
 
-    def RefreshGrid(self):
+    def RefreshGrid(self) -> None:
         '''Re-indexes and moves data after deletion'''
         for index, row in enumerate(self.rows_data): 
             row["num"].grid(row = index, column = 0)
@@ -178,6 +202,18 @@ class MainFrame(ctk.CTkScrollableFrame):
             
             # Update the visual row number
             row["num"].configure(text = str(index + 1))
+
+    def ValidateNumber(self, input: str) -> bool:
+        '''Only allows numbers and a single decimal place'''
+        if input == "":
+            # allows deletion
+            return True
+        try:
+            # verifies if string can become a float
+            float(input)
+            return True
+        except ValueError:
+            return False
 
 class ControlFrame(ctk.CTkFrame):
     def __init__(self, parent, add_command: function, update_command: function, reset_command: function, **kwargs):
