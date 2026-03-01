@@ -22,8 +22,8 @@ class App(ctk.CTk):
         # setup
         super().__init__(fg_color = THEME_BG)
         self.title("Stock Manager")
-        self.geometry("600x500")
-        self.minsize(500,400)
+        self.geometry("525x500")
+        self.minsize(525,350)
         self.ChangeTitleBar()
 
         self.exchange_rate = 1.0
@@ -128,6 +128,7 @@ class App(ctk.CTk):
                     'quantity': quantity,
                     'total': row_total,
                     'pct': change_percent,
+                    'qty_change': quantity_change,
                     'price_str': f"{currency_sym}{price:,.2f}",
                     'total_str': f"{currency_sym}{row_total:,.2f}",
                     'change_str': f"{'+' if quantity_change >= 0 else '-'}{currency_sym}{abs(quantity_change):,.2f} ({change_percent:+.2f}%)"
@@ -283,7 +284,8 @@ class MainFrame(ctk.CTkFrame):
             "stock price": "price",
             "amount": "quantity",
             "total value": "total",
-            "daily change": "pct"
+            "percent change": "pct",
+            "quantity change": "qty_change"
         }
         key = mapping.get(metric_lookup)
         
@@ -385,7 +387,7 @@ class ControlFrame(ctk.CTkFrame):
 
         self.menu_sort = ctk.CTkOptionMenu(
             self,
-            values = ["Total value", "Amount", "Daily change", "Stock price"],
+            values = ["Total value", "Amount", "Percent change", "Quantity change", "Stock price"],
             variable = self.sort_var,
             command = sort_command,
             fg_color = BTN_BLUE,

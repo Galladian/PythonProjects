@@ -4,10 +4,6 @@
         "amount": "9.0"
     },
     {
-        "ticker": "AMD",
-        "amount": "25.0"
-    },
-    {
         "ticker": "GOOGL",
         "amount": "15.0"
     },
@@ -16,24 +12,8 @@
         "amount": "20.0"
     },
     {
-        "ticker": "SOFI",
-        "amount": "150.0"
-    },
-    {
-        "ticker": "CAKE",
-        "amount": "40.0"
-    },
-    {
-        "ticker": "UBER",
-        "amount": "32.0"
-    },
-    {
-        "ticker": "SLV",
+        "ticker": "AMD",
         "amount": "25.0"
-    },
-    {
-        "ticker": "ELF",
-        "amount": "23.0"
     },
     {
         "ticker": "CRM",
@@ -46,6 +26,26 @@
     {
         "ticker": "NFLX",
         "amount": "10.0"
+    },
+    {
+        "ticker": "ELF",
+        "amount": "23.0"
+    },
+    {
+        "ticker": "SLV",
+        "amount": "25.0"
+    },
+    {
+        "ticker": "UBER",
+        "amount": "32.0"
+    },
+    {
+        "ticker": "CAKE",
+        "amount": "40.0"
+    },
+    {
+        "ticker": "SOFI",
+        "amount": "150.0"
     },
     {
         "ticker": "HIMS",
