@@ -269,7 +269,8 @@ class MainFrame(ctk.CTkScrollableFrame):
             row["price"].grid(row = index, column = 2)
             row["amount"].grid(row = index, column = 3)
             row["total"].grid(row = index, column = 4)
-            row["delete"].grid(row = index, column = 5)
+            row["change"].grid(row = index, column = 5)
+            row["delete"].grid(row = index, column = 6)
             
             # Update the visual row number
             row["num"].configure(text = str(index + 1))
