@@ -63,8 +63,8 @@ class App(ctk.CTk):
     def ResetCallback(self) -> None:
         '''Triggered to clear all rows'''
         self.main_frame.sheet.set_sheet_data(data = [])
-        self.main_frame.DynamicColumnResize()
         self.main_frame.AddRow()
+        self.main_frame.DynamicColumnResize(None)
         self.main_frame.sheet.redraw()
 
     def ToggleCallback(self) -> None:
@@ -323,10 +323,10 @@ class MainFrame(ctk.CTkFrame):
             colour = "#0F9D58" if row['pct'] >= 0 else "#DB4437"
             self.sheet.highlight_cells(row=idx, column=4, bg=colour, fg="white")
     
-    def DynamicColumnResize(self, event) -> None:
+    def DynamicColumnResize(self, event = None) -> None:
         '''Adjusts column widths based on frame width while maintaining ratios'''
-        current_width = event.width - 60
-        
+        current_width = (event.width if event else self.winfo_width()) - 60
+    
         if current_width > 100:
             new_widths = []
             for w in self.base_widths:
