@@ -322,6 +322,8 @@ class MainFrame(ctk.CTkFrame):
         for idx, row in enumerate(self.raw_data):
             colour = "#0F9D58" if row['pct'] >= 0 else "#DB4437"
             self.sheet.highlight_cells(row=idx, column=4, bg=colour, fg="white")
+        
+        self.DynamicColumnResize(None)
     
     def DynamicColumnResize(self, event = None) -> None:
         '''Adjusts column widths based on frame width while maintaining ratios'''
