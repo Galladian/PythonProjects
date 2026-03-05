@@ -6,7 +6,6 @@ import json
 from tksheet import Sheet
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import pandas as pd
 try:
     from ctypes import windll, byref, sizeof, c_int
 except:
@@ -25,7 +24,7 @@ class App(ctk.CTk):
         # setup
         super().__init__(fg_color = THEME_BG)
         self.title("Stock Manager")
-        self.geometry("1000x500")
+        self.geometry("525x500")
         self.minsize(525,350)
         self.ChangeTitleBar()
 
@@ -44,14 +43,14 @@ class App(ctk.CTk):
         self.control_frame = ControlFrame(self, self.AddRowCallback, self.UpdateCallback, self.ResetCallback, self.ToggleCallback, self.SortCallback)
         self.control_frame.place(relx = 0, rely = 0, relwidth = 1.0, relheight = 0.15)
 
-        self.main_frame = MainFrame(self)
-        self.main_frame.place(relx = 0, rely = 0.15, relwidth = 0.5, relheight = 0.7)
+        self.graph_frame = GraphFrame(self)
+        self.graph_frame.place(relx = 0.6, rely = 0.15, relwidth = 0.4, relheight = 0.85)
 
-        self.chart_frame = ChartFrame(self)
-        self.chart_frame.place(relx = 0.5, rely = 0.15, relwidth = 0.5, relheight = 0.85)
+        self.main_frame = MainFrame(self)
+        self.main_frame.place(relx = 0, rely = 0.15, relwidth = 0.6, relheight = 0.7)
 
         self.summary_frame = SummaryFrame(self)
-        self.summary_frame.place(relx = 0, rely = 0.85, relwidth = 0.5, relheight = 0.15)
+        self.summary_frame.place(relx = 0, rely = 0.85, relwidth = 0.6, relheight = 0.15)
 
     # CALLBACK FUNCTIONS
     def AddRowCallback(self) -> None:
@@ -69,8 +68,8 @@ class App(ctk.CTk):
     def ResetCallback(self) -> None:
         '''Triggered to clear all rows'''
         self.main_frame.sheet.set_sheet_data(data = [])
-        self.main_frame.sheet.set_column_widths([80, 80, 80, 100, 130])
         self.main_frame.AddRow()
+        self.main_frame.DynamicColumnResize(None)
         self.main_frame.sheet.redraw()
 
     def ToggleCallback(self) -> None:
@@ -96,63 +95,62 @@ class App(ctk.CTk):
         except Exception as e:
             print(f"Error fetching data: {e}")
 
-    def FetchHistoricalData(self, portfolio: list):
-        '''Background thread for the 1Y performance chart'''
+    def FetchHistoricalData(self, portfolio_map: dict) -> None:
+        '''Fetches 1yr history and calculates performance accurately'''
         try:
-            tickers = [p[0] for p in portfolio]
-            # 1. Force consistent Multi-Index structure
-            data = yf.download(tickers, period="1y", interval="1d", progress=False, group_by='column')
+            tickers = list(portfolio_map.keys())
+            # 1. Download data
+            data = yf.download(tickers, period="1y", interval="1wk", progress=False)
             
-            # 2. Extract 'Close' prices safely
-            # If multiple tickers, 'Close' is a level 0 index. If one, it's just a column.
-            if len(tickers) > 1:
-                close_prices = data['Close']
+            # 2. Extract only 'Close' prices
+            if 'Close' in data:
+                close_data = data['Close']
             else:
-                # For a single ticker, yfinance might not use a Multi-Index for 'Close'
-                close_prices = data['Close'].to_frame(name=tickers[0])
+                # Handle cases where yfinance returns a single ticker without a 'Close' header level
+                close_data = data
+                
+            # 3. Clean the data
+            # Fill missing values (NaN) so math doesn't break
+            close_data = close_data.ffill().bfill()
 
-            # 3. Clean and Align (fill gaps so the '+' math doesn't result in NaN)
-            close_prices = close_prices.ffill().bfill()
-
-            # 4. Calculate Portfolio Value
-            portfolio_history = pd.Series(0, index=close_prices.index)
-            for ticker, qty in portfolio:
-                if ticker in close_prices.columns:
-                    portfolio_history += close_prices[ticker] * qty
-
-            # 5. Resample to Weekly (End of Week) to get ~52 points
-            # 'W-FRI' ensures it picks the Friday of every week
-            portfolio_history = portfolio_history.resample('W-FRI').last()
-
-            # 6. Send back to UI thread
-            self.after(0, lambda: self.chart_frame.UpdateChart(
-                portfolio_history.index.strftime('%Y-%m-%d').tolist(), 
-                portfolio_history.values.tolist()
-            ))
+            # 4. Calculate portfolio value row by row (Vectorized)
+            # We ensure we only multiply by tickers actually present in the download
+            total_history = None
             
+            for ticker, qty in portfolio_map.items():
+                if ticker in close_data.columns:
+                    # fillna(0) ensures that if a stock didn't exist yet, it just counts as $0 
+                    # instead of turning the whole portfolio into NaN
+                    series = close_data[ticker].fillna(0) * qty
+                    if total_history is None:
+                        total_history = series
+                    else:
+                        total_history = total_history.add(series, fill_value=0)
+
+            if total_history is not None:
+                dates = total_history.index
+                values = total_history.values
+                self.after(0, lambda: self.graph_frame.UpdateChart(dates, values))
+                
         except Exception as e:
-            print(f"Chart Error: {e}")
+            print(f"Graph Error Logic: {e}")
     
     def UpdateCallback(self) -> None:
-        '''Modified to trigger both current prices and historical chart'''
+        '''Single entry point to trigger the background update chain'''
         table_data = self.main_frame.GetTableData()
         tickers = [row[0].strip().upper() for row in table_data if row[0].strip()]
-        threading.Thread(target=self.FetchPrices, args=(tickers,), daemon=True).start()
+        
+        if not tickers: return
 
-        # Filter for rows with both Ticker and Amount
-        portfolio = []
-        for row in table_data:
-            ticker = row[0].strip().upper()
-            try:
-                qty = float(row[2])
-            except:
-                qty = 0
-            if ticker and qty > 0:
-                portfolio.append((ticker, qty))
-        
-        if not portfolio: return
-        
-        threading.Thread(target=self.FetchHistoricalData, args=(portfolio,), daemon=True).start()
+        # Start ONE thread that handles the entire sequence
+        threading.Thread(target=self.SequentialUpdateTask, args=(tickers, table_data), daemon=True).start()
+
+    def SequentialUpdateTask(self, tickers, table_data) -> None:
+        '''Guarantees that Table finishes before Graph starts to avoid yfinance collisions'''
+        self.FetchPrices(tickers) 
+        portfolio_map = {row[0].strip().upper(): float(row[2] or 0) for row in table_data if row[0].strip()}
+        if portfolio_map:
+            self.FetchHistoricalData(portfolio_map)
 
     def ApplyPricesToUI(self, prev_prices, current_prices, multiplier=1.0) -> None:
         total_value = 0.0
@@ -203,6 +201,8 @@ class App(ctk.CTk):
     def OnClose(self) -> None:
         '''Executes when application is closed'''
         self.SaveData()
+        for after_id in self.tk.eval('after info').split():
+            self.after_cancel(after_id)
         self.quit()
         self.destroy()
 
@@ -283,6 +283,18 @@ class SummaryFrame(ctk.CTkFrame):
             text_color = "gray"
         )
         self.change_label.pack(expand = True, pady = (0, 10)) 
+        self.bind("<Configure>", self.RescaleText)
+    
+    def RescaleText(self, event):
+        '''Calculates and updates font sizes based on frame width'''
+
+        combined_metric = (event.width + (event.height*4)) / 2
+        total_font_size = max(14, int(combined_metric / 25)) 
+        change_font_size = max(10, int(combined_metric / 50))
+
+        # Apply new sizes
+        self.total_label.configure(font=("Helvetica", total_font_size, "bold"))
+        self.change_label.configure(font=("Helvetica", change_font_size, "bold"))
     
     def UpdateSummary(self, total_amount: float, change: float):
         '''Method to modify total and conigure profit/loss'''
@@ -313,7 +325,11 @@ class MainFrame(ctk.CTkFrame):
             empty_horizontal = 0, 
             empty_vertical = 0)
         self.sheet.grid(row = 0, column = 0, sticky = "nsew")
+        self.base_widths = [60, 60, 60, 80, 110]
+        self.total_base = sum(self.base_widths)
         self.ModifyUsage()
+
+        self.bind("<Configure>", self.DynamicColumnResize)
 
     # Functionality
     def AddRow(self) -> None:
@@ -375,8 +391,21 @@ class MainFrame(ctk.CTkFrame):
         for idx, row in enumerate(self.raw_data):
             colour = "#0F9D58" if row['pct'] >= 0 else "#DB4437"
             self.sheet.highlight_cells(row=idx, column=4, bg=colour, fg="white")
-        self.sheet.set_column_widths([80, 80, 80, 100, 130])
-        self.sheet.redraw()
+        
+        self.DynamicColumnResize(None)
+    
+    def DynamicColumnResize(self, event = None) -> None:
+        '''Adjusts column widths based on frame width while maintaining ratios'''
+        current_width = (event.width if event else self.winfo_width()) - 60
+    
+        if current_width > 100:
+            new_widths = []
+            for w in self.base_widths:
+                calculated_width = int((w / self.total_base) * current_width)
+                new_widths.append(calculated_width)
+            
+            self.sheet.set_column_widths(new_widths)
+            self.sheet.redraw()
 
     # Aesthetics
     def ModifyUsage(self) -> None:
@@ -417,7 +446,6 @@ class MainFrame(ctk.CTkFrame):
             bg = "#D3D3D3", 
             fg = "black"
         )
-        self.after(5, lambda: self.sheet.set_column_widths([80, 80, 80, 100, 130]))
 
 class ControlFrame(ctk.CTkFrame):
     def __init__(self, parent, add_command: function, update_command: function, reset_command: function, toggle_command: function, sort_command: function, **kwargs):
@@ -426,21 +454,19 @@ class ControlFrame(ctk.CTkFrame):
         # Setup
         self.currency_var = ctk.StringVar(value = "USD")
         self.sort_var = ctk.StringVar(value = "Sort by...")
-        self.grid_columnconfigure((0, 1, 2, 3, 4), weight = 1)
-        self.grid_rowconfigure(0, weight = 1)
 
         # setting widgets
         self.button_add = ctk.CTkButton(
             self, text = "+ Add Row", fg_color = BTN_BLUE, hover_color = BTN_HOVER, 
             command = add_command  
         )
-        self.button_add.grid(row = 0, column = 0, padx = 5)
+        self.button_add.place(relx = 0.01, rely = 0.2, relwidth = 0.18, relheight = 0.6)
 
         self.button_update = ctk.CTkButton(
             self, text = "Update", fg_color = BTN_BLUE, hover_color = BTN_HOVER, 
             command = update_command
         )
-        self.button_update.grid(row = 0, column = 1, padx = 5)
+        self.button_update.place(relx = 0.21, rely = 0.2, relwidth = 0.18, relheight = 0.6)
 
         self.menu_sort = ctk.CTkOptionMenu(
             self,
@@ -448,9 +474,10 @@ class ControlFrame(ctk.CTkFrame):
             variable = self.sort_var,
             command = sort_command,
             fg_color = BTN_BLUE,
+            button_color = BTN_BLUE,
             button_hover_color = BTN_HOVER
         )
-        self.menu_sort.grid(row = 0, column = 2, padx = 5)
+        self.menu_sort.place(relx = 0.41, rely = 0.2, relwidth = 0.18, relheight = 0.6)
 
         self.switch_currency = ctk.CTkSwitch(
             self, 
@@ -461,40 +488,41 @@ class ControlFrame(ctk.CTkFrame):
             onvalue = "NZD", offvalue = "USD",
             text_color = "white"
         )
-        self.switch_currency.grid(row = 0, column = 3, padx = 5)
+        self.switch_currency.place(relx = 0.61, rely = 0.2, relwidth = 0.18, relheight = 0.6)
 
         self.button_reset = ctk.CTkButton(
             self, text = "Reset", fg_color = BTN_RED, hover_color = "#8a2424", width = 80,
             command = reset_command
         )
-        self.button_reset.grid(row = 0, column = 4, padx = 5)
-    
-class ChartFrame(ctk.CTkFrame):
+        self.button_reset.place(relx = 0.81, rely = 0.2, relwidth = 0.18, relheight = 0.6)
+
+class GraphFrame(ctk.CTkFrame):
     def __init__(self, parent):
         super().__init__(parent, fg_color=THEME_DARK)
-
-        # Setup Plot
-        self.fig, self.ax = plt.subplots(figsize=(5, 3), facecolor=THEME_DARK)
-        self.canvas = FigureCanvasTkAgg(self.fig, master=self)
-        self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=10)
         
-        self.StylePlot()
-
-    def StylePlot(self):
-        self.ax.set_facecolor(THEME_DARK)
-        self.ax.tick_params(colors='white', labelsize=8)
-        self.ax.spines['bottom'].set_color('white')
-        self.ax.spines['left'].set_color('white')
-        self.ax.spines['top'].set_visible(False)
-        self.ax.spines['right'].set_visible(False)
-        self.ax.grid(True, linestyle='--', alpha=0.2)
+        # Create matplotlib figure
+        self.fig, self.ax = plt.subplots(figsize=(5, 4), dpi=100)
+        self.fig.patch.set_facecolor('#1e1e1e') # Match your THEME_DARK
+        self.ax.set_facecolor('#1e1e1e')
+        
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self)
+        self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
+        
+        self.ax.tick_params(colors='white')
+        for spine in self.ax.spines.values():
+            spine.set_color('white')
 
     def UpdateChart(self, dates, values):
         self.ax.clear()
-        self.StylePlot()
+        self.ax.set_facecolor('#1e1e1e')
         self.ax.plot(dates, values, color=BTN_BLUE, linewidth=2)
         self.ax.fill_between(dates, values, min(values), color=BTN_BLUE, alpha=0.1)
-        self.canvas.draw()
+        
+        self.ax.set_title("Portfolio Performance (1Y)", color="white", fontsize=10)
+        self.ax.tick_params(axis='x', rotation=45, labelsize=8, colors='white')
+        self.ax.tick_params(axis='y', labelsize=8, colors='white')
+        self.fig.tight_layout()
+        self.canvas.draw()  
 #endregion
 
 if __name__ == "__main__":
