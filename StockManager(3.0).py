@@ -5,6 +5,7 @@ import threading
 import json 
 from tksheet import Sheet
 import matplotlib.pyplot as plt
+from matplotlib.offsetbox import AnnotationBbox, TextArea
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 try:
     from ctypes import windll, byref, sizeof, c_int
@@ -52,7 +53,7 @@ class App(ctk.CTk):
         self.summary_frame = SummaryFrame(self)
         self.summary_frame.place(relx = 0, rely = 0.85, relwidth = 0.6, relheight = 0.15)
 
-    # CALLBACK FUNCTIONS
+    # Callback functions
     def AddRowCallback(self) -> None:
         '''Triggered when new row required'''
         self.main_frame.AddRow()
@@ -81,6 +82,17 @@ class App(ctk.CTk):
 
         self.ApplyPricesToUI(self.last_prices[0], self.last_prices[1], multiplier)
 
+    def UpdateCallback(self) -> None:
+        '''Single entry point to trigger the background update chain'''
+        table_data = self.main_frame.GetTableData()
+        tickers = [row[0].strip().upper() for row in table_data if row[0].strip()]
+        
+        if not tickers: return
+
+        # Start ONE thread that handles the entire sequence
+        threading.Thread(target=self.SequentialUpdateTask, args=(tickers, table_data), daemon=True).start()
+
+    # Update data and apply
     def FetchPrices(self, tickers: list) -> None:
         '''Background task to fetch data and update UI'''
         try:
@@ -133,17 +145,7 @@ class App(ctk.CTk):
                 self.after(0, lambda: self.graph_frame.UpdateChart(dates, values))
                 
         except Exception as e:
-            print(f"Graph Error Logic: {e}")
-    
-    def UpdateCallback(self) -> None:
-        '''Single entry point to trigger the background update chain'''
-        table_data = self.main_frame.GetTableData()
-        tickers = [row[0].strip().upper() for row in table_data if row[0].strip()]
-        
-        if not tickers: return
-
-        # Start ONE thread that handles the entire sequence
-        threading.Thread(target=self.SequentialUpdateTask, args=(tickers, table_data), daemon=True).start()
+            print(f"Graph Error Logic: {e}") 
 
     def SequentialUpdateTask(self, tickers, table_data) -> None:
         '''Guarantees that Table finishes before Graph starts to avoid yfinance collisions'''
@@ -405,7 +407,6 @@ class MainFrame(ctk.CTkFrame):
                 new_widths.append(calculated_width)
             
             self.sheet.set_column_widths(new_widths)
-            self.sheet.redraw()
 
     # Aesthetics
     def ModifyUsage(self) -> None:
@@ -498,26 +499,31 @@ class ControlFrame(ctk.CTkFrame):
 
 class GraphFrame(ctk.CTkFrame):
     def __init__(self, parent):
-        super().__init__(parent, fg_color=THEME_DARK)
+        super().__init__(parent, fg_color = THEME_DARK)
         
         # Create matplotlib figure
         self.fig, self.ax = plt.subplots(figsize=(5, 4), dpi=100)
-        self.fig.patch.set_facecolor('#1e1e1e') # Match your THEME_DARK
-        self.ax.set_facecolor('#1e1e1e')
+        self.fig.patch.set_facecolor(THEME_DARK) # Match your THEME_DARK
+        self.ax.set_facecolor(THEME_DARK)
         
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
         self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
         
         self.ax.tick_params(colors='white')
+        self.ax.spines['top'].set_visible(False)
+        self.ax.spines['right'].set_visible(False)
         for spine in self.ax.spines.values():
             spine.set_color('white')
 
     def UpdateChart(self, dates, values):
         self.ax.clear()
-        self.ax.set_facecolor('#1e1e1e')
-        self.ax.plot(dates, values, color=BTN_BLUE, linewidth=2)
+        self.ax.set_facecolor(THEME_DARK)
+        self.ax.plot(dates, values, color="#90D5FF", linewidth=2)
         self.ax.fill_between(dates, values, min(values), color=BTN_BLUE, alpha=0.1)
-        
+        self.ax.margins(x=0)           
+        self.ax.set_ylim(bottom=min(values))
+        self.ax.yaxis.grid(True, linestyle='--', alpha=0.3, color='gray', zorder=1)
+        self.ax.xaxis.grid(False)
         self.ax.set_title("Portfolio Performance (1Y)", color="white", fontsize=10)
         self.ax.tick_params(axis='x', rotation=45, labelsize=8, colors='white')
         self.ax.tick_params(axis='y', labelsize=8, colors='white')
