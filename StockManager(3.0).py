@@ -85,6 +85,7 @@ class App(ctk.CTk):
 
     def UpdateCallback(self) -> None:
         '''Single entry point to trigger the background update chain'''
+        self.control_frame.button_update.configure(state="disabled", text="Updating...")
         table_data = self.main_frame.GetTableData()
         tickers = [row[0].strip().upper() for row in table_data if row[0].strip()]
         
@@ -206,6 +207,7 @@ class App(ctk.CTk):
         self.main_frame.raw_data = new_raw_data
         self.main_frame.SyncSheetWithRaw()
         self.summary_frame.UpdateSummary(total_value, total_change)
+        self.control_frame.button_update.configure(state="enabled", text="Update")
 
     # Data persistence functions
     def OnClose(self) -> None:
