@@ -2,6 +2,7 @@
 import customtkinter as ctk
 import yfinance as yf
 import threading
+import pandas as pd
 import json 
 from tksheet import Sheet
 import matplotlib.pyplot as plt
@@ -97,11 +98,11 @@ class App(ctk.CTk):
         '''Background task to fetch data and update UI'''
         try:
             # retrieves most recent data
-            data = yf.download(tickers + ["NZD=X"], period = "2d", interval = "1d", progress = False, prepost = True)
-            close_data = data['Close'].ffill() 
+            data = yf.download(tickers + ["NZD=X"], period = "5d", interval = "1d", progress = False, prepost = True)
+            close_data = data['Close'].ffill().bfill()
 
             # 2. Assign the rows
-            self.last_prices = (close_data.iloc[0], close_data.iloc[-1])
+            self.last_prices = (close_data.iloc[-2], close_data.iloc[-1])
             self.exchange_rate = float(self.last_prices[1]["NZD=X"])
             self.after(0, lambda: self.ToggleCallback())
         except Exception as e:
@@ -154,30 +155,39 @@ class App(ctk.CTk):
         if portfolio_map:
             self.FetchHistoricalData(portfolio_map)
 
-    def ApplyPricesToUI(self, prev_prices, current_prices, multiplier=1.0) -> None:
+    def ApplyPricesToUI(self, prev_prices: dict, current_prices: dict, multiplier: float = 1.0) -> None:
+        '''Updates the UI safely, skipping corrupted data to prevent NaN/zeroing errors.'''
         total_value = 0.0
         total_change = 0.0
         currency_sym = "NZ$" if multiplier != 1.0 else "$"
         
         table_data = self.main_frame.GetTableData()
-        new_raw_data = [] # Temporary list to build the new state
+        new_raw_data = [] 
 
-        for idx, row in enumerate(table_data):
+        for row in table_data:
             ticker = row[0].strip().upper() 
-            if ticker in current_prices:
-                price = current_prices[ticker] * multiplier
-                prev_close = prev_prices[ticker] * multiplier
+            
+            if ticker in current_prices and ticker in prev_prices:
+                # ensure data is present 
+                p_curr = current_prices[ticker]
+                p_prev = prev_prices[ticker]
+                
+                if pd.isna(p_curr) or pd.isna(p_prev) or p_prev == 0:
+                    continue 
+
+                price = p_curr * multiplier
+                prev_close = p_prev * multiplier
                 
                 try:
                     quantity = float(row[2] or 0)
                 except ValueError:
                     quantity = 0.0
 
+                # sorta daa
                 change_percent = ((price - prev_close) / prev_close) * 100
                 quantity_change = (price - prev_close) * quantity
                 row_total = price * quantity
                 
-                # Store everything as raw numbers AND pre-formatted strings
                 new_raw_data.append({
                     'ticker': ticker,
                     'price': price,
@@ -193,10 +203,8 @@ class App(ctk.CTk):
                 total_value += row_total
                 total_change += quantity_change
 
-        # Update MainFrame's data and refresh view
         self.main_frame.raw_data = new_raw_data
         self.main_frame.SyncSheetWithRaw()
-        
         self.summary_frame.UpdateSummary(total_value, total_change)
 
     # Data persistence functions
