@@ -6,7 +6,7 @@ import pandas as pd
 import json 
 from tksheet import Sheet
 import matplotlib.pyplot as plt
-from matplotlib.offsetbox import AnnotationBbox, TextArea
+from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 try:
     from ctypes import windll, byref, sizeof, c_int
@@ -512,7 +512,7 @@ class GraphFrame(ctk.CTkFrame):
         super().__init__(parent, fg_color = THEME_DARK)
         
         # Create matplotlib figure
-        self.fig, self.ax = plt.subplots(figsize=(5, 4), dpi=100)
+        self.fig, self.ax = plt.subplots(figsize = (5, 4), dpi = 100)
         self.fig.patch.set_facecolor(THEME_DARK) # Match your THEME_DARK
         self.ax.set_facecolor(THEME_DARK)
         
