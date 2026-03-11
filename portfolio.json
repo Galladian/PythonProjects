@@ -28,23 +28,27 @@
         "amount": "32.0"
     },
     {
-        "ticker": "ELF",
-        "amount": "23.0"
-    },
-    {
-        "ticker": "CRM",
-        "amount": "8.0"
-    },
-    {
         "ticker": "SLV",
         "amount": "20.0"
+    },
+    {
+        "ticker": "ELF",
+        "amount": "23.0"
     },
     {
         "ticker": "PANW",
         "amount": "8.0"
     },
     {
+        "ticker": "HIMS",
+        "amount": "55.0"
+    },
+    {
+        "ticker": "CRM",
+        "amount": "8.0"
+    },
+    {
         "ticker": "NFLX",
-        "amount": "12.5"
+        "amount": "0.0"
     }
 ]

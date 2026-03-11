@@ -92,19 +92,24 @@ class App(ctk.CTk):
         if not tickers: return
 
         # Start ONE thread that handles the entire sequence
-        threading.Thread(target=self.SequentialUpdateTask, args=(tickers, table_data), daemon=True).start()
+        threading.Thread(target = self.SequentialUpdateTask, args = (tickers, table_data), daemon=True).start()
 
     # Update data and apply
     def FetchPrices(self, tickers: list) -> None:
         '''Background task to fetch data and update UI'''
         try:
             # retrieves most recent data
-            data = yf.download(tickers + ["NZD=X"], period = "5d", interval = "1d", progress = False, prepost = True)
+            data = yf.download(tickers + ["NZD=X"], period = "7d", interval = "1d", progress = False, prepost = True)
             close_data = data['Close'].ffill().bfill()
 
             # 2. Assign the rows
-            self.last_prices = (close_data.iloc[-2], close_data.iloc[-1])
+            index = -1
+            while close_data.iloc[index][tickers[0]] == close_data.iloc[index - 1][tickers[0]]:
+                index -= 1
+
+            self.last_prices = (close_data.iloc[index - 1], close_data.iloc[-1])
             self.exchange_rate = float(self.last_prices[1]["NZD=X"])
+
             self.after(0, lambda: self.ToggleCallback())
         except Exception as e:
             print(f"Error fetching data: {e}")
