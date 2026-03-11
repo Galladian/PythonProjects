@@ -7,6 +7,8 @@ import json
 from tksheet import Sheet
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
+from matplotlib.ticker import MaxNLocator
+import matplotlib.dates as mdates
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 try:
     from ctypes import windll, byref, sizeof, c_int
@@ -358,7 +360,7 @@ class MainFrame(ctk.CTkFrame):
         '''Returns all row data as a list of lists'''
         return self.sheet.get_sheet_data()
 
-    def UpdateRow(self, row_idx, values_dict) -> None:
+    def UpdateRow(self, row_idx: int, values_dict: dict) -> None:
         '''Helper to update specific columns in a row'''
         if "price" in values_dict: self.sheet.set_cell_data(row_idx, 1, values_dict["price"])
         if "total" in values_dict: self.sheet.set_cell_data(row_idx, 3, values_dict["total"])
@@ -516,34 +518,86 @@ class GraphFrame(ctk.CTkFrame):
     def __init__(self, parent):
         super().__init__(parent, fg_color = THEME_DARK)
         
-        # Create matplotlib figure
-        self.fig, self.ax = plt.subplots(figsize = (5, 4), dpi = 100)
-        self.fig.patch.set_facecolor(THEME_DARK) # Match your THEME_DARK
-        self.ax.set_facecolor(THEME_DARK)
-        
+        # 1. Initialize Figure
+        self.fig, self.ax = plt.subplots(figsize=(5, 4), dpi=100)
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
         self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
+
+        # 2. Apply persistent styling
+        self.SetStyle()
+        self.bind("<Configure>", self.OnResize)
+
+    def SetStyle(self) -> None:
+        '''Sets up the visual theme that doesn't change with data updates.'''
+        self.fig.patch.set_facecolor(THEME_DARK)
+        self.ax.set_facecolor(THEME_DARK)
         
-        self.ax.tick_params(colors='white')
+        # Spine & Tick Configuration
         self.ax.spines['top'].set_visible(False)
         self.ax.spines['right'].set_visible(False)
         for spine in self.ax.spines.values():
             spine.set_color('white')
+            
+        self.ax.tick_params(colors = 'white', labelsize = 8)
+        self.ax.xaxis.set_tick_params(rotation = 45)
+        
+        # Grid Configuration
+        self.ax.yaxis.grid(True, linestyle = '--', alpha = 0.3, color = 'gray', zorder = 1)
+        self.ax.set_title("Portfolio Performance (1Y)", color = "white", fontsize = 10, pad = 10)
+        self.OnResize()
 
-    def UpdateChart(self, dates, values):
+    def UpdateChart(self, dates: list, values: list) -> None:
+        '''Clears existing plot and draws new data.'''
+        if dates is None or values is None or len(dates) == 0:
+            return
+
         self.ax.clear()
-        self.ax.set_facecolor(THEME_DARK)
-        self.ax.plot(dates, values, color="#90D5FF", linewidth=2)
-        self.ax.fill_between(dates, values, min(values), color=BTN_BLUE, alpha=0.1)
-        self.ax.margins(x=0)           
-        self.ax.set_ylim(bottom=min(values))
-        self.ax.yaxis.grid(True, linestyle='--', alpha=0.3, color='gray', zorder=1)
-        self.ax.xaxis.grid(False)
-        self.ax.set_title("Portfolio Performance (1Y)", color="white", fontsize=10)
-        self.ax.tick_params(axis='x', rotation=45, labelsize=8, colors='white')
-        self.ax.tick_params(axis='y', labelsize=8, colors='white')
+        self.SetStyle()
+               
+        # Personalised style for data
+        self.ax.plot(dates, values, color="#90D5FF", linewidth=2, zorder=2)
+
+        minimum_value = min(values)
+        self.ax.fill_between(
+            dates, 
+            values, 
+            minimum_value, 
+            color = BTN_BLUE, 
+            alpha = 0.1, 
+            zorder = 1
+        )        
+        self.ax.set_ylim(bottom = minimum_value * 0.99) # Add 1% breathing room
+        self.ax.margins(x=0)
+        
         self.fig.tight_layout()
-        self.canvas.draw()  
+        self.canvas.draw() 
+
+    def OnResize(self, event = None):
+        '''Adjusts tick density and font size based on current width.'''
+        current_width = (event.width if event else self.winfo_width())
+        
+        # Determine density of dates based on width
+        if current_width < 300:
+            nbins = 3
+            font_size = 6
+            date_format = '%b'
+        elif current_width < 500:
+            nbins = 5
+            font_size = 7
+            date_format = '%b %d'
+        else:
+            nbins = 8
+            font_size = 8
+            date_format = '%b %d %Y'
+
+        #nApply to axis without clearing the whole plot
+        self.ax.xaxis.set_major_locator(MaxNLocator(nbins = nbins))
+        self.ax.xaxis.set_major_formatter(mdates.DateFormatter(date_format))
+        self.ax.tick_params(axis = 'x', labelsize = font_size)
+        
+        # 3. Refresh canvas
+        self.fig.autofmt_xdate()
+        self.canvas.draw_idle()
 #endregion
 
 if __name__ == "__main__":
