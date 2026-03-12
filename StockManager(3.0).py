@@ -1,25 +1,26 @@
 #region IMPORTS + SETTINGS
-import customtkinter as ctk
-import yfinance as yf
+
+# standard imports
+import json
 import threading
-import pandas as pd
-import json 
-from tksheet import Sheet
-import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
-from matplotlib.ticker import MaxNLocator
+from ctypes import byref, c_int, sizeof, windll
+
+# Third party libraries
+import customtkinter as ctk
 import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import yfinance as yf
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-try:
-    from ctypes import windll, byref, sizeof, c_int
-except:
-    pass
+from matplotlib.ticker import MaxNLocator
+from tksheet import Sheet
 
 # colours
-THEME_BG = "#19233c"        # Main Background
-THEME_DARK = "#121a2d"      # Darker Background (Summary)
-BTN_BLUE = "#1f538d"        # Standard Button
-BTN_RED = "#C53434"         # Reset/Delete Button
+THEME_BG = "#19233c"        
+THEME_DARK = "#121a2d"      
+BTN_BLUE = "#1f538d"        
+BTN_RED = "#C53434"        
 BTN_HOVER = "#14375e"
 #endregion
 
@@ -42,7 +43,7 @@ class App(ctk.CTk):
         # detection
         self.protocol("WM_DELETE_WINDOW", self.OnClose)
     
-    def CreateFrames(self):
+    def CreateFrames(self) -> None:
         '''Adds frame widgets onto window'''
         self.control_frame = ControlFrame(self, self.AddRowCallback, self.UpdateCallback, self.ResetCallback, self.ToggleCallback, self.SortCallback)
         self.control_frame.place(relx = 0, rely = 0, relwidth = 1.0, relheight = 0.15)
@@ -156,7 +157,7 @@ class App(ctk.CTk):
         except Exception as e:
             print(f"Graph Error Logic: {e}") 
 
-    def SequentialUpdateTask(self, tickers, table_data) -> None:
+    def SequentialUpdateTask(self, tickers: dict, table_data: dict) -> None:
         '''Guarantees that Table finishes before Graph starts to avoid yfinance collisions'''
         self.FetchPrices(tickers) 
         portfolio_map = {row[0].strip().upper(): float(row[2] or 0) for row in table_data if row[0].strip()}
@@ -518,15 +519,95 @@ class GraphFrame(ctk.CTkFrame):
     def __init__(self, parent):
         super().__init__(parent, fg_color = THEME_DARK)
         
-        # 1. Initialize Figure
-        self.fig, self.ax = plt.subplots(figsize=(5, 4), dpi=100)
+        self.fig, self.ax = plt.subplots(figsize = (5, 4), dpi = 100)
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
-        self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
+        self.canvas.get_tk_widget().pack(fill = "both", expand = True, padx = 5, pady = 5)
 
-        # 2. Apply persistent styling
+        # Store data references for the hover logic
+        self.line_data_x = []
+        self.line_data_y = []
+
         self.SetStyle()
+        
+        # 1. Create the hover tooltip (initially invisible)
+        self.annotation_box = self.ax.annotate(
+            "", xy = (0,0), xytext = (10, 10),
+            textcoords = "offset points",
+            bbox = dict(boxstyle = "round", fc = "white", alpha = 0.8),
+            arrowprops = dict(arrowstyle = "->", color = 'white')
+        )
+        self.annotation_box.set_visible(False)
+        
+        # 2. Bind the motion event
+        self.canvas.mpl_connect("motion_notify_event", self.OnHover)
         self.bind("<Configure>", self.OnResize)
 
+    def UpdateChart(self, dates: list, values: list) -> None:
+        '''Clears existing plot and draws new data.'''
+        if dates is None or values is None or len(dates) == 0: return
+
+        self.line_data_x = dates
+        self.line_data_y = values
+
+        self.ax.clear()
+        self.SetStyle()
+
+        # Re-initialize annotation after clearing
+        self.annotation_box = self.ax.annotate(
+            "", xy=(0,0), xytext=(10, 10),
+            textcoords="offset points",
+            bbox=dict(boxstyle="round", fc="#2B2B2B", ec="white"),
+            color="white", fontsize=8,
+            arrowprops=dict(arrowstyle="->", color='white')
+        )
+        self.annotation_box.set_visible(False)
+               
+        # Personalised style for data
+        self.ax.plot(dates, values, color = "#90D5FF", linewidth = 2, zorder = 2)
+
+        minimum_value = min(values) 
+        self.ax.set_ylim(bottom = minimum_value * 0.99) # Add 1% breathing room  
+        y_min = self.ax.get_ylim()[0]
+        self.ax.fill_between(
+            dates, 
+            values, 
+            y2 = y_min, 
+            color = BTN_BLUE, 
+            alpha = 0.1, 
+            zorder = 1,
+            clip_on = False
+        )          
+        self.ax.margins(x=0)
+        
+        self.fig.tight_layout()
+        self.canvas.draw() 
+
+    def OnHover(self, event) -> None:
+        '''Calculates nearest point and toggles visibility of the tooltip.'''
+        is_visible = self.annotation_box.get_visible()
+        
+        if event.inaxes == self.ax and event.xdata is not None:
+            try:
+                # find point
+                x_data_nums = mdates.date2num(self.line_data_x)
+                index = np.argmin(np.abs(x_data_nums - event.xdata))
+                self.annotation_box.xy = (self.line_data_x[index], self.line_data_y[index])
+                
+                # format
+                date_string = self.line_data_x[index].strftime('%b %d, %Y')
+                text = f"{date_string}\n${self.line_data_y[index]:,.2f}"
+                
+                self.annotation_box.set_text(text)
+                self.annotation_box.set_visible(True)
+                self.canvas.draw_idle()
+            except (ValueError, TypeError) as e:
+                print(f"Error on hover: {e}")
+        else:
+            if is_visible:
+                self.annotation_box.set_visible(False)
+                self.canvas.draw_idle()
+
+    # Aesthetics and design
     def SetStyle(self) -> None:
         '''Sets up the visual theme that doesn't change with data updates.'''
         self.fig.patch.set_facecolor(THEME_DARK)
@@ -546,47 +627,21 @@ class GraphFrame(ctk.CTkFrame):
         self.ax.set_title("Portfolio Performance (1Y)", color = "white", fontsize = 10, pad = 10)
         self.OnResize()
 
-    def UpdateChart(self, dates: list, values: list) -> None:
-        '''Clears existing plot and draws new data.'''
-        if dates is None or values is None or len(dates) == 0:
-            return
-
-        self.ax.clear()
-        self.SetStyle()
-               
-        # Personalised style for data
-        self.ax.plot(dates, values, color="#90D5FF", linewidth=2, zorder=2)
-
-        minimum_value = min(values)
-        self.ax.fill_between(
-            dates, 
-            values, 
-            minimum_value, 
-            color = BTN_BLUE, 
-            alpha = 0.1, 
-            zorder = 1
-        )        
-        self.ax.set_ylim(bottom = minimum_value * 0.99) # Add 1% breathing room
-        self.ax.margins(x=0)
-        
-        self.fig.tight_layout()
-        self.canvas.draw() 
-
     def OnResize(self, event = None):
         '''Adjusts tick density and font size based on current width.'''
         current_width = (event.width if event else self.winfo_width())
         
         # Determine density of dates based on width
         if current_width < 300:
-            nbins = 3
+            nbins = 4
             font_size = 6
             date_format = '%b'
         elif current_width < 500:
-            nbins = 5
+            nbins = 7
             font_size = 7
             date_format = '%b %d'
         else:
-            nbins = 8
+            nbins = 9
             font_size = 8
             date_format = '%b %d %Y'
 
