@@ -16,12 +16,19 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.ticker import MaxNLocator
 from tksheet import Sheet
 
-# colours
+# general theme
 THEME_BG = "#19233c"        
 THEME_DARK = "#121a2d"      
-BTN_BLUE = "#1f538d"        
-BTN_RED = "#C53434"        
+
+# buttons
+BTN_REG = "#1f538d"        
+BTN_RESET = "#C53434"        
 BTN_HOVER = "#14375e"
+BTN_RESET_HOVER = "#8a2424"
+
+# for graph
+ANNOT_BG = "#2B2B2B"
+LINE_PLOT = "#90D5FF"
 #endregion
 
 class App(ctk.CTk):
@@ -88,14 +95,14 @@ class App(ctk.CTk):
 
     def UpdateCallback(self) -> None:
         '''Single entry point to trigger the background update chain'''
-        self.control_frame.button_update.configure(state="disabled", text="Updating...")
+        self.control_frame.button_update.configure(state = "disabled", text = "Fetching..")
         table_data = self.main_frame.GetTableData()
         tickers = [row[0].strip().upper() for row in table_data if row[0].strip()]
         
         if not tickers: return
 
         # Start ONE thread that handles the entire sequence
-        threading.Thread(target = self.SequentialUpdateTask, args = (tickers, table_data), daemon=True).start()
+        threading.Thread(target = self.SequentialUpdateTask, args = (tickers, table_data), daemon = True).start()
 
     # Update data and apply
     def FetchPrices(self, tickers: list) -> None:
@@ -118,31 +125,23 @@ class App(ctk.CTk):
             print(f"Error fetching data: {e}")
 
     def FetchHistoricalData(self, portfolio_map: dict) -> None:
-        '''Fetches 1yr history and calculates performance accurately'''
+        '''Fetches 1yr history and calculates performance'''
         try:
+            # grab and filter data
             tickers = list(portfolio_map.keys())
-            # 1. Download data
             data = yf.download(tickers, period="1y", interval="1wk", progress=False)
             
-            # 2. Extract only 'Close' prices
             if 'Close' in data:
                 close_data = data['Close']
             else:
-                # Handle cases where yfinance returns a single ticker without a 'Close' header level
                 close_data = data
                 
-            # 3. Clean the data
-            # Fill missing values (NaN) so math doesn't break
             close_data = close_data.ffill().bfill()
-
-            # 4. Calculate portfolio value row by row (Vectorized)
-            # We ensure we only multiply by tickers actually present in the download
             total_history = None
             
             for ticker, qty in portfolio_map.items():
                 if ticker in close_data.columns:
                     # fillna(0) ensures that if a stock didn't exist yet, it just counts as $0 
-                    # instead of turning the whole portfolio into NaN
                     series = close_data[ticker].fillna(0) * qty
                     if total_history is None:
                         total_history = series
@@ -150,12 +149,15 @@ class App(ctk.CTk):
                         total_history = total_history.add(series, fill_value=0)
 
             if total_history is not None:
+                # updates graph 
                 dates = total_history.index
                 values = total_history.values
-                self.after(0, lambda: self.graph_frame.UpdateChart(dates, values))
-                
+                self.after(0, lambda: self.graph_frame.UpdateChart(dates, values))             
         except Exception as e:
             print(f"Graph Error Logic: {e}") 
+        
+        # reactivate update button
+        self.control_frame.button_update.configure(state = "normal", text = "Update")
 
     def SequentialUpdateTask(self, tickers: dict, table_data: dict) -> None:
         '''Guarantees that Table finishes before Graph starts to avoid yfinance collisions'''
@@ -215,7 +217,6 @@ class App(ctk.CTk):
         self.main_frame.raw_data = new_raw_data
         self.main_frame.SyncSheetWithRaw()
         self.summary_frame.UpdateSummary(total_value, total_change)
-        self.control_frame.button_update.configure(state="enabled", text="Update")
 
     # Data persistence functions
     def OnClose(self) -> None:
@@ -286,7 +287,7 @@ class App(ctk.CTk):
 #region FRAMES
 class SummaryFrame(ctk.CTkFrame):
     def __init__(self, parent, **kwargs):
-        super().__init__(parent, fg_color = THEME_DARK, **kwargs)
+        super().__init__(parent, fg_color = THEME_DARK, corner_radius = 0, **kwargs)
 
         self.total_label = ctk.CTkLabel(
             self,
@@ -331,9 +332,9 @@ class SummaryFrame(ctk.CTkFrame):
         )
 
 class MainFrame(ctk.CTkFrame):
-    def __init__(self, parent):
+    def __init__(self, parent, **kwargs):
         # setup
-        super().__init__(parent, fg_color = THEME_DARK)
+        super().__init__(parent, fg_color = THEME_DARK, corner_radius = 0, **kwargs)
         self.grid_columnconfigure(0, weight = 1)
         self.grid_rowconfigure(0, weight = 1)
         self.raw_data = []
@@ -468,7 +469,7 @@ class MainFrame(ctk.CTkFrame):
 
 class ControlFrame(ctk.CTkFrame):
     def __init__(self, parent, add_command: function, update_command: function, reset_command: function, toggle_command: function, sort_command: function, **kwargs):
-        super().__init__(parent, fg_color = "transparent", **kwargs)
+        super().__init__(parent, fg_color = THEME_BG, corner_radius = 0, **kwargs)
 
         # Setup
         self.currency_var = ctk.StringVar(value = "USD")
@@ -476,13 +477,19 @@ class ControlFrame(ctk.CTkFrame):
 
         # setting widgets
         self.button_add = ctk.CTkButton(
-            self, text = "+ Add Row", fg_color = BTN_BLUE, hover_color = BTN_HOVER, 
+            self, 
+            text = "+ Add Row", 
+            fg_color = BTN_REG, 
+            hover_color = BTN_HOVER, 
             command = add_command  
         )
         self.button_add.place(relx = 0.01, rely = 0.2, relwidth = 0.18, relheight = 0.6)
 
         self.button_update = ctk.CTkButton(
-            self, text = "Update", fg_color = BTN_BLUE, hover_color = BTN_HOVER, 
+            self, 
+            text = "Update", 
+            fg_color = BTN_REG, 
+            hover_color = BTN_HOVER, 
             command = update_command
         )
         self.button_update.place(relx = 0.21, rely = 0.2, relwidth = 0.18, relheight = 0.6)
@@ -492,8 +499,8 @@ class ControlFrame(ctk.CTkFrame):
             values = ["Total value", "Amount", "Percent change", "Quantity change", "Stock price"],
             variable = self.sort_var,
             command = sort_command,
-            fg_color = BTN_BLUE,
-            button_color = BTN_BLUE,
+            fg_color = BTN_REG,
+            button_color = BTN_REG,
             button_hover_color = BTN_HOVER
         )
         self.menu_sort.place(relx = 0.41, rely = 0.2, relwidth = 0.18, relheight = 0.6)
@@ -503,21 +510,25 @@ class ControlFrame(ctk.CTkFrame):
             text = "USD/NZD",
             variable = self.currency_var, 
             command = toggle_command,
-            progress_color = BTN_BLUE, 
+            progress_color = BTN_REG, 
             onvalue = "NZD", offvalue = "USD",
             text_color = "white"
         )
         self.switch_currency.place(relx = 0.61, rely = 0.2, relwidth = 0.18, relheight = 0.6)
 
         self.button_reset = ctk.CTkButton(
-            self, text = "Reset", fg_color = BTN_RED, hover_color = "#8a2424", width = 80,
+            self, text = "Reset", fg_color = BTN_RESET, hover_color = BTN_RESET_HOVER, width = 80,
             command = reset_command
         )
         self.button_reset.place(relx = 0.81, rely = 0.2, relwidth = 0.18, relheight = 0.6)
 
+        # to make the drop down menu more uniform
+        self.menu_sort.bind("<Enter>", lambda e: self.menu_sort.configure(fg_color = BTN_HOVER, button_color = BTN_HOVER))
+        self.menu_sort.bind("<Leave>", lambda e: self.menu_sort.configure(fg_color = BTN_REG, button_color = BTN_REG))
+
 class GraphFrame(ctk.CTkFrame):
-    def __init__(self, parent):
-        super().__init__(parent, fg_color = THEME_DARK)
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, fg_color = THEME_DARK, corner_radius = 0, **kwargs)
         
         self.fig, self.ax = plt.subplots(figsize = (5, 4), dpi = 100)
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
@@ -554,16 +565,16 @@ class GraphFrame(ctk.CTkFrame):
 
         # Re-initialize annotation after clearing
         self.annotation_box = self.ax.annotate(
-            "", xy=(0,0), xytext=(10, 10),
-            textcoords="offset points",
-            bbox=dict(boxstyle="round", fc="#2B2B2B", ec="white"),
-            color="white", fontsize=8,
-            arrowprops=dict(arrowstyle="->", color='white')
+            "", xy = (0,0), xytext = (10, 10),
+            textcoords = "offset points",
+            bbox = dict(boxstyle = "round", fc = ANNOT_BG, ec = "white"),
+            color = "white", fontsize = 8,
+            arrowprops = dict(arrowstyle = "->", color = "white")
         )
         self.annotation_box.set_visible(False)
                
         # Personalised style for data
-        self.ax.plot(dates, values, color = "#90D5FF", linewidth = 2, zorder = 2)
+        self.ax.plot(dates, values, color = LINE_PLOT, linewidth = 2, zorder = 2)
 
         minimum_value = min(values) 
         self.ax.set_ylim(bottom = minimum_value * 0.99) # Add 1% breathing room  
@@ -572,12 +583,12 @@ class GraphFrame(ctk.CTkFrame):
             dates, 
             values, 
             y2 = y_min, 
-            color = BTN_BLUE, 
+            color = BTN_REG, 
             alpha = 0.1, 
             zorder = 1,
             clip_on = False
         )          
-        self.ax.margins(x=0)
+        self.ax.margins(x = 0)
         
         self.fig.tight_layout()
         self.canvas.draw() 
@@ -594,7 +605,7 @@ class GraphFrame(ctk.CTkFrame):
                 self.annotation_box.xy = (self.line_data_x[index], self.line_data_y[index])
                 
                 # format
-                date_string = self.line_data_x[index].strftime('%b %d, %Y')
+                date_string = self.line_data_x[index].strftime("%b %d, %Y")
                 text = f"{date_string}\n${self.line_data_y[index]:,.2f}"
                 
                 self.annotation_box.set_text(text)
@@ -614,16 +625,16 @@ class GraphFrame(ctk.CTkFrame):
         self.ax.set_facecolor(THEME_DARK)
         
         # Spine & Tick Configuration
-        self.ax.spines['top'].set_visible(False)
-        self.ax.spines['right'].set_visible(False)
+        self.ax.spines["top"].set_visible(False)
+        self.ax.spines["right"].set_visible(False)
         for spine in self.ax.spines.values():
-            spine.set_color('white')
+            spine.set_color("white")
             
-        self.ax.tick_params(colors = 'white', labelsize = 8)
+        self.ax.tick_params(colors = "white", labelsize = 8)
         self.ax.xaxis.set_tick_params(rotation = 45)
         
         # Grid Configuration
-        self.ax.yaxis.grid(True, linestyle = '--', alpha = 0.3, color = 'gray', zorder = 1)
+        self.ax.yaxis.grid(True, linestyle = "--", alpha = 0.3, color = 'gray', zorder = 1)
         self.ax.set_title("Portfolio Performance (1Y)", color = "white", fontsize = 10, pad = 10)
         self.OnResize()
 
@@ -631,24 +642,22 @@ class GraphFrame(ctk.CTkFrame):
         '''Adjusts tick density and font size based on current width.'''
         current_width = (event.width if event else self.winfo_width())
         
-        # Determine density of dates based on width
-        if current_width < 300:
-            nbins = 4
-            font_size = 6
-            date_format = '%b'
-        elif current_width < 500:
-            nbins = 7
-            font_size = 7
-            date_format = '%b %d'
-        else:
-            nbins = 9
-            font_size = 8
-            date_format = '%b %d %Y'
+        # Find the first threshold that fits
+        thresholds = [
+            (300, 4, 6, "%b"),
+            (500, 7, 7, "%b %d"),
+            (float('inf'), 9, 8, "%b %d %Y") # Default/Large
+        ]
+
+        for limit, bins, size, fmt in thresholds:
+            if current_width < limit:
+                nbins, font_size, date_format = bins, size, fmt
+                break
 
         #nApply to axis without clearing the whole plot
         self.ax.xaxis.set_major_locator(MaxNLocator(nbins = nbins))
         self.ax.xaxis.set_major_formatter(mdates.DateFormatter(date_format))
-        self.ax.tick_params(axis = 'x', labelsize = font_size)
+        self.ax.tick_params(axis = "x", labelsize = font_size)
         
         # 3. Refresh canvas
         self.fig.autofmt_xdate()
