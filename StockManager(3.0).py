@@ -16,25 +16,27 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.ticker import MaxNLocator
 from tksheet import Sheet
 
-# general theme
-THEME_BG = "#19233c"        
-THEME_DARK = "#121a2d"      
+# General Theme (Softer, Dusty Blues)
+THEME_TOP = "#33475d" # R G B
+THEME_MAIN = "#475e75"        
+PANEL_TOP = 0x005d4733  # B G R
 
-# buttons
-BTN_REG = "#1f538d"        
-BTN_RESET = "#C53434"        
-BTN_HOVER = "#14375e"
-BTN_RESET_HOVER = "#8a2424"
+# Buttons (Keep existing Rose/Dusty Pink)
+BTN_REG = "#e11d48"
+BTN_HOVER = "#be123c"
+BTN_RESET = "#253549"
+BTN_RESET_HOVER = "#283650"
 
-# for graph
-ANNOT_BG = "#2B2B2B"
-LINE_PLOT = "#90D5FF"
+# Graph & Data
+ANNOT_BG = "#334155"
+LINE_PLOT = "#f49cbb"
+WHITE = "#DFDFDF"
 #endregion
 
 class App(ctk.CTk):
     def __init__(self):
         # setup
-        super().__init__(fg_color = THEME_BG)
+        super().__init__(fg_color = THEME_TOP)
         self.title("Stock Manager")
         self.geometry("525x500")
         self.minsize(525,350)
@@ -81,7 +83,7 @@ class App(ctk.CTk):
         '''Triggered to clear all rows'''
         self.main_frame.sheet.set_sheet_data(data = [])
         self.main_frame.AddRow()
-        self.main_frame.DynamicColumnResize(None)
+        self.main_frame.DynamicTableResize(None)
         self.main_frame.sheet.redraw()
 
     def ToggleCallback(self) -> None:
@@ -279,7 +281,7 @@ class App(ctk.CTk):
         try:
             HWND = windll.user32.GetParent(self.winfo_id())
             DWMWA_ATTRIBUTE = 35
-            COLOR = 0x003c2319
+            COLOR = PANEL_TOP
             windll.dwmapi.DwmSetWindowAttribute(HWND, DWMWA_ATTRIBUTE, byref(c_int(COLOR)), sizeof(c_int))
         except:
             pass
@@ -287,7 +289,7 @@ class App(ctk.CTk):
 #region FRAMES
 class SummaryFrame(ctk.CTkFrame):
     def __init__(self, parent, **kwargs):
-        super().__init__(parent, fg_color = THEME_DARK, corner_radius = 0, **kwargs)
+        super().__init__(parent, fg_color = THEME_MAIN, corner_radius = 0, **kwargs)
 
         self.total_label = ctk.CTkLabel(
             self,
@@ -334,7 +336,7 @@ class SummaryFrame(ctk.CTkFrame):
 class MainFrame(ctk.CTkFrame):
     def __init__(self, parent, **kwargs):
         # setup
-        super().__init__(parent, fg_color = THEME_DARK, corner_radius = 0, **kwargs)
+        super().__init__(parent, fg_color = THEME_MAIN, corner_radius = 0, **kwargs)
         self.grid_columnconfigure(0, weight = 1)
         self.grid_rowconfigure(0, weight = 1)
         self.raw_data = []
@@ -350,7 +352,7 @@ class MainFrame(ctk.CTkFrame):
         self.total_base = sum(self.base_widths)
         self.ModifyUsage()
 
-        self.bind("<Configure>", self.DynamicColumnResize)
+        self.bind("<Configure>", self.DynamicTableResize)
 
     # Functionality
     def AddRow(self) -> None:
@@ -413,12 +415,14 @@ class MainFrame(ctk.CTkFrame):
             colour = "#0F9D58" if row['pct'] >= 0 else "#DB4437"
             self.sheet.highlight_cells(row=idx, column=4, bg=colour, fg="white")
         
-        self.DynamicColumnResize(None)
+        self.DynamicTableResize(None)
     
-    def DynamicColumnResize(self, event = None) -> None:
-        '''Adjusts column widths based on frame width while maintaining ratios'''
+    def DynamicTableResize(self, event = None) -> None:
+        '''Adjusts graph dimensions based on frame width while maintaining ratios'''
         current_width = (event.width if event else self.winfo_width()) - 60
-    
+        current_height = (event.height if event else self.winfo_height())
+
+        # table
         if current_width > 100:
             new_widths = []
             for w in self.base_widths:
@@ -426,6 +430,19 @@ class MainFrame(ctk.CTkFrame):
                 new_widths.append(calculated_width)
             
             self.sheet.set_column_widths(new_widths)
+        
+        new_height = max(25, int(current_height / 12.5))
+        self.sheet.set_all_row_heights(new_height)
+
+        # font 
+        norm = min(1.0, current_height / 1000.0)
+        base_font = 5   
+        growth_factor = 35   
+        
+        new_font_size = int(base_font + (growth_factor * (norm ** 2)))
+        new_font = ("Arial", new_font_size, "normal")
+        self.sheet.font(new_font)
+        self.sheet.refresh()
 
     # Aesthetics
     def ModifyUsage(self) -> None:
@@ -447,29 +464,32 @@ class MainFrame(ctk.CTkFrame):
 
         # Styling
         self.sheet.set_options(
-            table_bg = THEME_DARK,    
-            frame_bg = THEME_DARK, 
-            header_bg = THEME_DARK,
-            index_bg = THEME_DARK,
-            index_fg = "#ADD8E6",
-            top_left_bg = THEME_DARK,
+            table_bg = THEME_MAIN,    
+            frame_bg = THEME_MAIN, 
+            header_bg = THEME_MAIN,
+            index_bg = THEME_MAIN,
+            index_fg = LINE_PLOT,
+            top_left_bg = THEME_MAIN,
             empty_horizontal=0, 
             empty_vertical=0
         )
         self.sheet.highlight_columns(
             columns = [1, 3, 4], 
-            bg = "#57B9DA", 
+            bg = LINE_PLOT, 
             fg = "black"
         )
         self.sheet.highlight_columns(
             columns = [0, 2], 
-            bg = "#D3D3D3", 
+            bg = WHITE, 
             fg = "black"
         )
 
+        self.sheet.column_alignments = ["w", "center", "center", "center", "center"]
+        self.sheet.refresh()
+
 class ControlFrame(ctk.CTkFrame):
     def __init__(self, parent, add_command: function, update_command: function, reset_command: function, toggle_command: function, sort_command: function, **kwargs):
-        super().__init__(parent, fg_color = THEME_BG, corner_radius = 0, **kwargs)
+        super().__init__(parent, fg_color = THEME_TOP, corner_radius = 0, **kwargs)
 
         # Setup
         self.currency_var = ctk.StringVar(value = "USD")
@@ -528,7 +548,7 @@ class ControlFrame(ctk.CTkFrame):
 
 class GraphFrame(ctk.CTkFrame):
     def __init__(self, parent, **kwargs):
-        super().__init__(parent, fg_color = THEME_DARK, corner_radius = 0, **kwargs)
+        super().__init__(parent, fg_color = THEME_MAIN, corner_radius = 0, **kwargs)
         
         self.fig, self.ax = plt.subplots(figsize = (5, 4), dpi = 100)
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
@@ -606,7 +626,7 @@ class GraphFrame(ctk.CTkFrame):
                 
                 # format
                 date_string = self.line_data_x[index].strftime("%b %d, %Y")
-                text = f"{date_string}\n${self.line_data_y[index]:,.2f}"
+                text = f"{date_string}\nUS${self.line_data_y[index]:,.2f}"
                 
                 self.annotation_box.set_text(text)
                 self.annotation_box.set_visible(True)
@@ -621,8 +641,8 @@ class GraphFrame(ctk.CTkFrame):
     # Aesthetics and design
     def SetStyle(self) -> None:
         '''Sets up the visual theme that doesn't change with data updates.'''
-        self.fig.patch.set_facecolor(THEME_DARK)
-        self.ax.set_facecolor(THEME_DARK)
+        self.fig.patch.set_facecolor(THEME_MAIN)
+        self.ax.set_facecolor(THEME_MAIN)
         
         # Spine & Tick Configuration
         self.ax.spines["top"].set_visible(False)
@@ -634,7 +654,7 @@ class GraphFrame(ctk.CTkFrame):
         self.ax.xaxis.set_tick_params(rotation = 45)
         
         # Grid Configuration
-        self.ax.yaxis.grid(True, linestyle = "--", alpha = 0.3, color = 'gray', zorder = 1)
+        self.ax.yaxis.grid(True, linestyle = "--", alpha = 0.3, color = "gray", zorder = 1)
         self.ax.set_title("Portfolio Performance (1Y)", color = "white", fontsize = 10, pad = 10)
         self.OnResize()
 
