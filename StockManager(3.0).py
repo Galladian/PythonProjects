@@ -31,6 +31,9 @@ BTN_RESET_HOVER = "#283650"
 ANNOT_BG = "#334155"
 LINE_PLOT = "#f49cbb"
 WHITE = "#DFDFDF"
+
+SOFT_GREEN = "#00C805" # Vibrant but clean
+SOFT_RED = "#FF3B30"   # Sharp but professional
 #endregion
 
 class App(ctk.CTk):
@@ -316,15 +319,15 @@ class SummaryFrame(ctk.CTkFrame):
         change_font_size = max(10, int(combined_metric / 50))
 
         # Apply new sizes
-        self.total_label.configure(font=("Helvetica", total_font_size, "bold"))
-        self.change_label.configure(font=("Helvetica", change_font_size, "bold"))
+        self.total_label.configure(font = ("Helvetica", total_font_size, "bold"))
+        self.change_label.configure(font = ("Helvetica", change_font_size, "bold"))
     
     def UpdateSummary(self, total_amount: float, change: float):
         '''Method to modify total and conigure profit/loss'''
         self.total_label.configure(text = f"Total: ${total_amount:,.2f}")
 
         # change label config
-        colour = "#0F9D58" if change >= 0 else "#DB4437"
+        colour = SOFT_GREEN if change >= 0 else SOFT_RED
         prefix = "+" if change >= 0 else ""
         prefix_value = "+" if change >= 0 else "-"
         percent = (change / (total_amount - change) * 100) if total_amount != change else 0
@@ -358,7 +361,7 @@ class MainFrame(ctk.CTkFrame):
     def AddRow(self) -> None:
         '''Insert a new row with default values'''
         self.sheet.insert_row(["", "$0.00", "", "$0.00", "0.00%"])
-        self.sheet.redraw()
+        self.DynamicTableResize()
 
     def GetTableData(self) -> None:
         '''Returns all row data as a list of lists'''
@@ -386,14 +389,10 @@ class MainFrame(ctk.CTkFrame):
         key = mapping.get(metric_lookup)
         
         if key is None:
-            # This will now print the lowercase version if it fails
             print(f"Sort Error: '{metric_lookup}' not found in mapping.")
             return
 
-        # 4. Sort (using .get() with a default of 0 is safer against missing keys)
-        self.raw_data.sort(key=lambda x: x.get(key, 0), reverse=True)
-        
-        # 5. Update display
+        self.raw_data.sort(key = lambda x: x.get(key, 0), reverse = True)
         self.SyncSheetWithRaw()
     
     def SyncSheetWithRaw(self) -> None:
@@ -412,8 +411,8 @@ class MainFrame(ctk.CTkFrame):
         
         # Re-apply colors based on the raw pct
         for idx, row in enumerate(self.raw_data):
-            colour = "#0F9D58" if row['pct'] >= 0 else "#DB4437"
-            self.sheet.highlight_cells(row=idx, column=4, bg=colour, fg="white")
+            colour = SOFT_GREEN if row['pct'] >= 0 else SOFT_RED
+            self.sheet.highlight_cells(row = idx, column = 4, bg = colour, fg = "white")
         
         self.DynamicTableResize(None)
     
@@ -440,7 +439,7 @@ class MainFrame(ctk.CTkFrame):
         growth_factor = 35   
         
         new_font_size = int(base_font + (growth_factor * (norm ** 2)))
-        new_font = ("Arial", new_font_size, "normal")
+        new_font = ("Helvetica", new_font_size, "normal")
         self.sheet.font(new_font)
         self.sheet.refresh()
 
@@ -467,11 +466,15 @@ class MainFrame(ctk.CTkFrame):
             table_bg = THEME_MAIN,    
             frame_bg = THEME_MAIN, 
             header_bg = THEME_MAIN,
+            header_fg = "gray70",
             index_bg = THEME_MAIN,
-            index_fg = LINE_PLOT,
+            index_fg = WHITE,
+            index_display = "none",
+            outline_color = THEME_MAIN,
+            grid_color = "#2A2E39",
             top_left_bg = THEME_MAIN,
-            empty_horizontal=0, 
-            empty_vertical=0
+            empty_horizontal = 0, 
+            empty_vertical = 0
         )
         self.sheet.highlight_columns(
             columns = [1, 3, 4], 
@@ -623,6 +626,14 @@ class GraphFrame(ctk.CTkFrame):
                 x_data_nums = mdates.date2num(self.line_data_x)
                 index = np.argmin(np.abs(x_data_nums - event.xdata))
                 self.annotation_box.xy = (self.line_data_x[index], self.line_data_y[index])
+
+                canvas_width = self.canvas.get_width_height()[0]
+                
+                # determines which side the annotation box appears
+                if event.x > (canvas_width * 0.6):
+                    self.annotation_box.set_position((-100, 10)) 
+                else:
+                    self.annotation_box.set_position((10, 10))
                 
                 # format
                 date_string = self.line_data_x[index].strftime("%b %d, %Y")
