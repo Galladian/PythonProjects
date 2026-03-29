@@ -596,7 +596,7 @@ class GraphFrame(ctk.CTkFrame):
         )
         self.annotation_box.set_visible(False)
                
-        # Personalised style for data
+        # Personalised style for data 
         self.ax.plot(dates, values, color = LINE_PLOT, linewidth = 2, zorder = 2)
 
         minimum_value = min(values) 

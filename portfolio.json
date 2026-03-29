@@ -1,7 +1,7 @@
 [
     {
         "ticker": "META",
-        "amount": "9.0"
+        "amount": "10.0"
     },
     {
         "ticker": "AMD",
@@ -16,35 +16,35 @@
         "amount": "20.0"
     },
     {
+        "ticker": "SOFI",
+        "amount": "200.0"
+    },
+    {
         "ticker": "CAKE",
         "amount": "49.0"
     },
     {
-        "ticker": "SOFI",
-        "amount": "150.0"
+        "ticker": "BN",
+        "amount": "52.0"
     },
     {
         "ticker": "PANW",
         "amount": "12.0"
     },
     {
-        "ticker": "SLV",
-        "amount": "25.0"
-    },
-    {
-        "ticker": "ELF",
-        "amount": "23.0"
-    },
-    {
         "ticker": "CRM",
         "amount": "9.0"
+    },
+    {
+        "ticker": "SLV",
+        "amount": "25.0"
     },
     {
         "ticker": "HIMS",
         "amount": "63.0"
     },
     {
-        "ticker": "NFLX",
-        "amount": "12.5"
+        "ticker": "ELF",
+        "amount": "15.0"
     }
 ]
