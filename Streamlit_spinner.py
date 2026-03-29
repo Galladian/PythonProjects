@@ -44,6 +44,10 @@ with st.sidebar:
 
 # --- 3. Improved Logic to Determine Winner ---
 def prepare_spin():
+    # Reset all result-related states immediately
+    st.session_state.show_result = False
+    st.session_state.winner_name = ""
+    
     names = [x['name'] for x in new_data]
     weights = [x['percent'] for x in new_data]
     sum_w = sum(weights) if sum(weights) > 0 else 1
@@ -52,16 +56,13 @@ def prepare_spin():
     winner = manual_rig if manual_rig else np.random.choice(names, p=norm_weights)
     
     idx = names.index(winner)
-    # Calculate degrees from start
     start_deg = sum(norm_weights[:idx]) * 360
     slice_width = norm_weights[idx] * 360
     mid_deg = start_deg + (slice_width / 2)
     
-    # MATH FIX: 270 degrees aligns the SVG "East" start with the "North" pointer
-    # Then we subtract mid_deg to bring that slice to the top
+    # 270 degrees aligns SVG start with the North pointer
     st.session_state.target_angle = (270 - mid_deg) + (360 * 5)
     st.session_state.winner_name = winner
-    st.session_state.show_result = False # CRITICAL: Hide result until JS signal
 
 # --- 4. Build the Visual Wheel ---
 wheel_colors = ["#FF4B4B", "#1C83E1", "#00C781", "#FFBB00", "#7D3CFF", "#FF4B91"]
@@ -109,24 +110,26 @@ with col_left:
             wheel.style.transform = "rotate({st.session_state.target_angle}deg)";
             btn.disabled = true;
             btn.style.opacity = "0.5";
-            // Wait 4 seconds for animation, then tell Streamlit to show result
+            // Wait exactly 4 seconds for the animation to finish
             setTimeout(() => {{ 
                 window.parent.postMessage({{type: 'streamlit:setComponentValue', value: true}}, '*'); 
             }}, 4000);
         }};
     </script>
     """
-    # This value becomes 'True' only when the JS setTimeout finishes
+    
+    # components.html returns the value sent by window.parent.postMessage
     spin_animation_finished = components.html(html_code, height=500)
     
+    # Update the show_result state ONLY when the JS component sends the signal
     if spin_animation_finished:
         st.session_state.show_result = True
 
 with col_right:
-    # This block is now strictly controlled by show_result
-    if st.session_state.show_result and st.session_state.winner_name:
+    # Only show these elements if show_result is True
+    if st.session_state.get('show_result') and st.session_state.winner_name:
         st.balloons()
         st.markdown(f"<h1 style='text-align: center; color: #FFBB00;'>🎊 WINNER 🎊</h1>", unsafe_allow_html=True)
         st.markdown(f"<h2 style='text-align: center;'>{st.session_state.winner_name}</h2>", unsafe_allow_html=True)
     else:
-        st.info("🎡 Ready to spin! Press the red button under the wheel.")
+        st.info("🎡 The winner will appear here after the spin stops!")
