@@ -17,7 +17,7 @@ url_winner = params.get("win")
 
 with st.sidebar:
     st.title("⚙️ Settings")
-    password = st.text_input("mc2026", type="password")
+    password = st.text_input("Password", type="password")
     
     new_data = []
     total_p = 0
@@ -36,7 +36,7 @@ with st.sidebar:
         st.rerun()
 
     manual_rig = None
-    if password == "club2026":
+    if password == "mc2026":
         st.success("Admin Active")
         manual_rig = st.selectbox("Force Winner?", [None] + [x['name'] for x in new_data])
 
