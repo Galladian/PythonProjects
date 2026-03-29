@@ -23,7 +23,6 @@ with st.sidebar:
     
     new_data = []
     total_p = 0
-    # Use bracket notation to avoid 'method' object errors
     for i, item in enumerate(st.session_state['items']):
         cols = st.columns([2, 1, 0.5])
         name = cols[0].text_input(f"n{i}", value=item['name'], key=f"n{i}", label_visibility="collapsed")
@@ -43,7 +42,7 @@ with st.sidebar:
         st.success("Admin Active")
         manual_rig = st.selectbox("Force Winner?", [None] + [x['name'] for x in new_data])
 
-# --- 3. Logic to Determine Winner ---
+# --- 3. Improved Logic to Determine Winner ---
 def prepare_spin():
     names = [x['name'] for x in new_data]
     weights = [x['percent'] for x in new_data]
@@ -53,18 +52,20 @@ def prepare_spin():
     winner = manual_rig if manual_rig else np.random.choice(names, p=norm_weights)
     
     idx = names.index(winner)
+    # Calculate degrees from start
     start_deg = sum(norm_weights[:idx]) * 360
-    end_deg = start_deg + (norm_weights[idx] * 360)
-    mid_deg = (start_deg + end_deg) / 2
+    slice_width = norm_weights[idx] * 360
+    mid_deg = start_deg + (slice_width / 2)
     
-    # Offset by 90 to align SVG start (3 o'clock) with Pointer (12 o'clock)
-    st.session_state.target_angle = (90 - mid_deg) + (360 * 5)
+    # MATH FIX: 270 degrees aligns the SVG "East" start with the "North" pointer
+    # Then we subtract mid_deg to bring that slice to the top
+    st.session_state.target_angle = (270 - mid_deg) + (360 * 5)
     st.session_state.winner_name = winner
-    st.session_state.show_result = False 
+    st.session_state.show_result = False # CRITICAL: Hide result until JS signal
 
 # --- 4. Build the Visual Wheel ---
 wheel_colors = ["#FF4B4B", "#1C83E1", "#00C781", "#FFBB00", "#7D3CFF", "#FF4B91"]
-svg_elements = "" # Initialized here to prevent NameError
+svg_elements = ""
 current_angle = 0
 
 for i, item in enumerate(new_data):
@@ -80,8 +81,8 @@ for i, item in enumerate(new_data):
     svg_elements += f'<path d="M150,150 L{x1},{y1} A100,100 0 {large_arc},1 {x2},{y2} Z" fill="{color}" stroke="#0e1117" stroke-width="2"/>'
     
     mid_angle = current_angle + (size / 2)
-    tx, ty = 150 + 60 * np.cos(np.radians(mid_angle)), 150 + 60 * np.sin(np.radians(mid_angle))
-    svg_elements += f'<text x="{tx}" y="{ty}" fill="white" font-size="10" font-weight="bold" text-anchor="middle" alignment-baseline="middle" transform="rotate({mid_angle}, {tx}, {ty})">{item["name"]}</text>'
+    tx, ty = 150 + 65 * np.cos(np.radians(mid_angle)), 150 + 65 * np.sin(np.radians(mid_angle))
+    svg_elements += f'<text x="{tx}" y="{ty}" fill="white" font-size="12" font-weight="bold" text-anchor="middle" alignment-baseline="middle" transform="rotate({mid_angle}, {tx}, {ty})">{item["name"]}</text>'
     current_angle += size
 
 # --- 5. Display Area ---
@@ -107,17 +108,25 @@ with col_left:
         btn.onclick = () => {{
             wheel.style.transform = "rotate({st.session_state.target_angle}deg)";
             btn.disabled = true;
-            setTimeout(() => {{ window.parent.postMessage({{type: 'streamlit:setComponentValue', value: true}}, '*'); }}, 4000);
+            btn.style.opacity = "0.5";
+            // Wait 4 seconds for animation, then tell Streamlit to show result
+            setTimeout(() => {{ 
+                window.parent.postMessage({{type: 'streamlit:setComponentValue', value: true}}, '*'); 
+            }}, 4000);
         }};
     </script>
     """
-    spin_done = components.html(html_code, height=500)
-    if spin_done:
+    # This value becomes 'True' only when the JS setTimeout finishes
+    spin_animation_finished = components.html(html_code, height=500)
+    
+    if spin_animation_finished:
         st.session_state.show_result = True
 
 with col_right:
-    if st.session_state.show_result:
+    # This block is now strictly controlled by show_result
+    if st.session_state.show_result and st.session_state.winner_name:
         st.balloons()
-        st.markdown(f"<h1 style='text-align: center; color: #FFBB00;'>🎊 WINNER 🎊</h1><h2 style='text-align: center;'>{st.session_state.winner_name}</h2>", unsafe_allow_html=True)
+        st.markdown(f"<h1 style='text-align: center; color: #FFBB00;'>🎊 WINNER 🎊</h1>", unsafe_allow_html=True)
+        st.markdown(f"<h2 style='text-align: center;'>{st.session_state.winner_name}</h2>", unsafe_allow_html=True)
     else:
-        st.info("🎡 Press 'Reset' to set the wheel, then click 'SPIN' to see the result!")
+        st.info("🎡 Ready to spin! Press the red button under the wheel.")
