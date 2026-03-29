@@ -26,7 +26,7 @@ with st.sidebar:
     total_p = 0
     
     st.write("Edit Items:")
-    for i, item in enumerate(st.session_state.items):
+    for i, item in enumerate(st.session_state['items']):
         cols = st.columns([2, 1, 0.5])
         name = cols[0].text_input(f"n{i}", value=item['name'], key=f"n{i}", label_visibility="collapsed")
         perc = cols[1].number_input(f"p{i}", value=float(item['percent']), key=f"p{i}", label_visibility="collapsed")
