@@ -74,21 +74,39 @@ st.title("🎡 Club Decision Wheel")
 
 wheel_colors = ["#FF5733", "#33FF57", "#3357FF", "#F333FF", "#FF33A1", "#F3FF33"]
 
-# Create the SVG slices
-svg_slices = ""
+svg_elements = ""
 current_angle = 0
 for i, item in enumerate(new_data):
+    # Calculate slice size
     size = (item['percent'] / total_p) * 360 if total_p > 0 else 0
     color = wheel_colors[i % len(wheel_colors)]
     
-    # SVG Arc Math
+    # 1. Draw the Slice (Arc)
     x1 = 150 + 100 * np.cos(np.radians(current_angle))
     y1 = 150 + 100 * np.sin(np.radians(current_angle))
     x2 = 150 + 100 * np.cos(np.radians(current_angle + size))
     y2 = 150 + 100 * np.sin(np.radians(current_angle + size))
     
     large_arc = 1 if size > 180 else 0
-    svg_slices += f'<path d="M150,150 L{x1},{y1} A100,100 0 {large_arc},1 {x2},{y2} Z" fill="{color}" stroke="white" stroke-width="1"/>'
+    svg_elements += f'<path d="M150,150 L{x1},{y1} A100,100 0 {large_arc},1 {x2},{y2} Z" fill="{color}" stroke="white" stroke-width="1"/>'
+    
+    # 2. Draw the Text Label
+    # We find the middle angle of the slice to place the text
+    mid_angle = current_angle + (size / 2)
+    # We place the text at 70% of the radius (70px out from center)
+    text_x = 150 + 65 * np.cos(np.radians(mid_angle))
+    text_y = 150 + 65 * np.sin(np.radians(mid_angle))
+    
+    # Rotate text so it points toward the center
+    text_rotation = mid_angle 
+    
+    svg_elements += f"""
+    <text x="{text_x}" y="{text_y}" fill="white" font-size="12" font-family="Arial" font-weight="bold" 
+          text-anchor="middle" alignment-baseline="middle" transform="rotate({text_rotation}, {text_x}, {text_y})">
+        {item['name']}
+    </text>
+    """
+    
     current_angle += size
 
 html_code = f"""
