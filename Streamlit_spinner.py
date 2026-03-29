@@ -3,13 +3,17 @@ import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import time
-import json
+import random
 
 st.set_page_config(page_title="Executive Spinner", layout="wide")
 
 # --- Initialize Session State ---
 if 'items' not in st.session_state:
     st.session_state['items'] = [{"name": "Pizza", "percent": 50}, {"name": "Tacos", "percent": 50}]
+if 'winner_name' not in st.session_state:
+    st.session_state.winner_name = ""
+if 'target_angle' not in st.session_state:
+    st.session_state.target_angle = 0
 
 # --- Secret Rigging ---
 params = st.query_params
@@ -40,11 +44,7 @@ with st.sidebar:
         st.success("Admin Active")
         manual_rig = st.selectbox("Force Winner?", [None] + [x['name'] for x in new_data])
 
-# --- Logic to Determine Winner BEFORE Animation ---
-if 'target_angle' not in st.session_state:
-    st.session_state.target_angle = 0
-    st.session_state.winner_name = ""
-
+# --- Logic to Determine Winner ---
 def calculate_winner():
     names = [x['name'] for x in new_data]
     weights = [x['percent'] for x in new_data]
@@ -58,92 +58,76 @@ def calculate_winner():
     else:
         winner = np.random.choice(names, p=norm_weights)
     
-    # Calculate angle for the JS wheel
-    # We find the center of the winner's slice
     idx = names.index(winner)
     start_deg = sum(norm_weights[:idx]) * 360
     end_deg = start_deg + (norm_weights[idx] * 360)
     mid_deg = (start_deg + end_deg) / 2
     
-    # 360 - mid_deg because CSS rotation is clockwise, SVG starts at 3 o'clock
-    st.session_state.target_angle = (360 - mid_deg) + (360 * 5) # 5 full spins
+    # Calculate stop angle (5 full spins + target)
+    st.session_state.target_angle = (360 - mid_deg) + (360 * 5)
     st.session_state.winner_name = winner
 
-# --- The Visual Wheel (HTML/JS) ---
+# --- Build the SVG Wheel ---
 st.title("🎡 Club Decision Wheel")
 
-wheel_colors = ["#FF5733", "#33FF57", "#3357FF", "#F333FF", "#FF33A1", "#F3FF33"]
-
+wheel_colors = ["#FF4B4B", "#1C83E1", "#00C781", "#FFBB00", "#7D3CFF", "#FF4B91"]
 svg_elements = ""
 current_angle = 0
+
 for i, item in enumerate(new_data):
-    # Calculate slice size
     size = (item['percent'] / total_p) * 360 if total_p > 0 else 0
     color = wheel_colors[i % len(wheel_colors)]
     
-    # 1. Draw the Slice (Arc)
+    # Path math
     x1 = 150 + 100 * np.cos(np.radians(current_angle))
     y1 = 150 + 100 * np.sin(np.radians(current_angle))
     x2 = 150 + 100 * np.cos(np.radians(current_angle + size))
     y2 = 150 + 100 * np.sin(np.radians(current_angle + size))
     
     large_arc = 1 if size > 180 else 0
-    svg_elements += f'<path d="M150,150 L{x1},{y1} A100,100 0 {large_arc},1 {x2},{y2} Z" fill="{color}" stroke="white" stroke-width="1"/>'
+    svg_elements += f'<path d="M150,150 L{x1},{y1} A100,100 0 {large_arc},1 {x2},{y2} Z" fill="{color}" stroke="#0e1117" stroke-width="2"/>'
     
-    # 2. Draw the Text Label
-    # We find the middle angle of the slice to place the text
+    # Text math
     mid_angle = current_angle + (size / 2)
-    # We place the text at 70% of the radius (70px out from center)
-    text_x = 150 + 65 * np.cos(np.radians(mid_angle))
-    text_y = 150 + 65 * np.sin(np.radians(mid_angle))
+    tx = 150 + 60 * np.cos(np.radians(mid_angle))
+    ty = 150 + 60 * np.sin(np.radians(mid_angle))
     
-    # Rotate text so it points toward the center
-    text_rotation = mid_angle 
+    svg_elements += f'<text x="{tx}" y="{ty}" fill="white" font-size="10" font-family="sans-serif" font-weight="bold" text-anchor="middle" alignment-baseline="middle" transform="rotate({mid_angle}, {tx}, {ty})">{item["name"]}</text>'
     
-    svg_elements = "" 
-    current_angle = 0
-    for i, item in enumerate(new_data):
-        # ... (your math for path and text) ...
-        svg_elements += f'<path d="..." ... />'
-        svg_elements += f'<text ...>{item["name"]}</text>'
-        current_angle += size
+    current_angle += size
 
-html_code = f"""
-<div style="display: flex; flex-direction: column; align-items: center; background: #0e1117;">
-    <div id="pointer" style="width: 0; height: 0; border-left: 15px solid transparent; border-right: 15px solid transparent; border-top: 20px solid #FFCC00; margin-bottom: -10px; z-index: 10;"></div>
-    <div id="wheel-container" style="transition: transform 4s cubic-bezier(0.15, 0, 0.15, 1); transform: rotate(0deg);">
-        <svg width="300" height="300" viewBox="0 0 300 300">
-            {svg_elements}
-        </svg>
+# --- Display Area ---
+col_left, col_right = st.columns([1, 1])
+
+with col_left:
+    if st.button("🔄 Prepare New Spin", use_container_width=True):
+        calculate_winner()
+        st.rerun()
+
+    html_code = f"""
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; background: #0e1117; padding: 20px; border-radius: 10px;">
+        <div style="width: 0; height: 0; border-left: 15px solid transparent; border-right: 15px solid transparent; border-top: 20px solid #FFBB00; margin-bottom: -10px; z-index: 10;"></div>
+        <div id="wheel-container" style="transition: transform 4s cubic-bezier(0.15, 0, 0.15, 1); transform: rotate(0deg);">
+            <svg width="300" height="300" viewBox="0 0 300 300">{svg_elements}</svg>
+        </div>
+        <button id="spin-btn" style="margin-top: 30px; padding: 15px 40px; background: #FF4B4B; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 18px; font-weight: bold;">CLICK TO SPIN</button>
     </div>
-    <button id="spin-btn" style="margin-top: 20px; padding: 10px 30px; background: #FF4B4B; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">SPIN!</button>
-</div>
+    <script>
+        const btn = document.getElementById('spin-btn');
+        const wheel = document.getElementById('wheel-container');
+        btn.onclick = () => {{
+            wheel.style.transform = "rotate({st.session_state.target_angle}deg)";
+            btn.disabled = true;
+            btn.style.background = "#333";
+            btn.innerText = "SPINNING...";
+            setTimeout(() => {{ window.parent.postMessage({{type: 'streamlit:setComponentValue', value: true}}, '*'); }}, 4000);
+        }};
+    </script>
+    """
+    spin_finished = components.html(html_code, height=500)
 
-<script>
-    const btn = document.getElementById('spin-btn');
-    const wheel = document.getElementById('wheel-container');
-    
-    btn.onclick = () => {{
-        const targetDeg = {st.session_state.target_angle};
-        wheel.style.transform = `rotate(${{targetDeg}}deg)`;
-        btn.disabled = true;
-        btn.style.opacity = "0.5";
-        
-        // Tell Streamlit when done (optional flair)
-        setTimeout(() => {{
-            window.parent.postMessage({{type: 'streamlit:setComponentValue', value: true}}, '*');
-        }}, 4000);
-    }};
-</script>
-"""
-
-# Display the Wheel
-if st.button("Prepare Spin"):
-    calculate_winner()
-    st.rerun()
-
-components.html(html_code, height=450)
-
-if st.session_state.winner_name:
-    st.write("---")
-    st.subheader(f"Result will appear above! (Rigged for: {st.session_state.winner_name})")
+with col_right:
+    if spin_finished:
+        st.balloons()
+        st.markdown(f"<h1 style='text-align: center; color: #FFBB00;'>🎊 WINNER 🎊</h1>", unsafe_allow_html=True)
+        st.markdown(f"<h2 style='text-align: center;'>{st.session_state.winner_name}</h2>", unsafe_allow_html=True)
