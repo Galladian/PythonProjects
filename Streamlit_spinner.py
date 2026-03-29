@@ -99,9 +99,14 @@ for i, item in enumerate(new_data):
 # --- Display Area ---
 col_left, col_right = st.columns([1, 1])
 
+# Initialize a flag to hide the winner until the spin is done
+if 'show_result' not in st.session_state:
+    st.session_state.show_result = False
+
 with col_left:
     if st.button("🔄 Prepare New Spin", use_container_width=True):
         calculate_winner()
+        st.session_state.show_result = False # Hide old winner
         st.rerun()
 
     html_code = f"""
@@ -120,14 +125,25 @@ with col_left:
             btn.disabled = true;
             btn.style.background = "#333";
             btn.innerText = "SPINNING...";
-            setTimeout(() => {{ window.parent.postMessage({{type: 'streamlit:setComponentValue', value: true}}, '*'); }}, 4000);
+            // This tells Streamlit to update AFTER the 4-second animation
+            setTimeout(() => {{ 
+                window.parent.postMessage({{type: 'streamlit:setComponentValue', value: true}}, '*'); 
+            }}, 4000);
         }};
     </script>
     """
-    spin_finished = components.html(html_code, height=500)
+    # This variable catches the message from the JavaScript above
+    spin_finished_signal = components.html(html_code, height=500)
+    
+    # If the JS sends the signal, set show_result to True
+    if spin_finished_signal:
+        st.session_state.show_result = True
 
 with col_right:
-    if spin_finished:
+    # ONLY show the winner if the animation is actually finished
+    if st.session_state.show_result and st.session_state.winner_name:
         st.balloons()
         st.markdown(f"<h1 style='text-align: center; color: #FFBB00;'>🎊 WINNER 🎊</h1>", unsafe_allow_html=True)
         st.markdown(f"<h2 style='text-align: center;'>{st.session_state.winner_name}</h2>", unsafe_allow_html=True)
+    else:
+        st.write("### 🎡 Spin the wheel to see the result!")
