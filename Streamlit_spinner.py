@@ -17,7 +17,7 @@ url_winner = params.get("win")
 
 with st.sidebar:
     st.title("⚙️ Settings")
-    password = st.text_input("Admin Password", type="password")
+    password = st.text_input("mc2026", type="password")
     
     new_data = []
     total_p = 0
@@ -100,21 +100,20 @@ for i, item in enumerate(new_data):
     # Rotate text so it points toward the center
     text_rotation = mid_angle 
     
-    svg_elements += f"""
-    <text x="{text_x}" y="{text_y}" fill="white" font-size="12" font-family="Arial" font-weight="bold" 
-          text-anchor="middle" alignment-baseline="middle" transform="rotate({text_rotation}, {text_x}, {text_y})">
-        {item['name']}
-    </text>
-    """
-    
-    current_angle += size
+    svg_elements = "" 
+    current_angle = 0
+    for i, item in enumerate(new_data):
+        # ... (your math for path and text) ...
+        svg_elements += f'<path d="..." ... />'
+        svg_elements += f'<text ...>{item["name"]}</text>'
+        current_angle += size
 
 html_code = f"""
 <div style="display: flex; flex-direction: column; align-items: center; background: #0e1117;">
     <div id="pointer" style="width: 0; height: 0; border-left: 15px solid transparent; border-right: 15px solid transparent; border-top: 20px solid #FFCC00; margin-bottom: -10px; z-index: 10;"></div>
     <div id="wheel-container" style="transition: transform 4s cubic-bezier(0.15, 0, 0.15, 1); transform: rotate(0deg);">
         <svg width="300" height="300" viewBox="0 0 300 300">
-            {svg_slices}
+            {svg_elements}
         </svg>
     </div>
     <button id="spin-btn" style="margin-top: 20px; padding: 10px 30px; background: #FF4B4B; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">SPIN!</button>
