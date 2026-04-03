@@ -12,6 +12,9 @@ if 'items' not in st.session_state:
         {"name": "Pasta", "percent": 50.0},
         {"name": "Chocolate", "percent": 50.0}
     ]
+# Tracks if the spin result should be shown in the UI
+if 'reveal_winner' not in st.session_state:
+    st.session_state.reveal_winner = False
 
 # --- 2. Sidebar Settings ---
 with st.sidebar:
@@ -39,6 +42,7 @@ with st.sidebar:
         manual_rig = st.selectbox("Force Winner?", [None] + [x['name'] for x in current_items])
     
     if st.button("🔄 Reset Wheel State"):
+        st.session_state.reveal_winner = False
         st.rerun()
 
 # --- 3. Logic: Randomized Landing ---
@@ -57,13 +61,13 @@ def get_wheel_data(items_list, rigged_name):
     start_degree = (sum(weights[:winner_idx]) / total_w) * 360
     end_degree = (sum(weights[:winner_idx+1]) / total_w) * 360
     
-    # 3-degree padding to keep it off the lines
-    padding = 3
+    padding = 5
     random_spot = np.random.uniform(start_degree + padding, end_degree - padding)
     total_rotation = (270 - random_spot) + (360 * 5)
     
     return winner_name, int(total_rotation)
 
+# Calculate outcome (this stays hidden from user until reveal_winner is True)
 winner, angle = get_wheel_data(current_items, manual_rig)
 
 # --- 4. Main UI Rendering ---
@@ -71,7 +75,6 @@ st.title("🎡 Club Decision Wheel")
 col_wheel, col_info = st.columns([1.2, 0.8])
 
 with col_wheel:
-    # Build SVG inside the wheel component
     colors = ["#FF4B4B", "#1C83E1", "#00C781", "#FFBB00", "#7D3CFF", "#FF4B91"]
     total_p = sum(x['percent'] for x in current_items) if sum(x['percent'] for x in current_items) > 0 else 1
     svg_parts = ""
@@ -104,33 +107,39 @@ with col_wheel:
             wheel.style.transform = "rotate({angle}deg)";
             btn.disabled = true;
             btn.style.opacity = "0.5";
+            // Wait for animation to finish then send signal to Streamlit
             setTimeout(() => {{
                 window.parent.postMessage({{type: 'streamlit:setComponentValue', value: true}}, '*');
             }}, 4100);
         }};
     </script>
     """
-    # Using the return value of components.html to trigger Streamlit's right-side display
-    spin_finished = components.html(wheel_html, height=450)
+    # spin_signal becomes True only after the JS setTimeout finishes
+    spin_signal = components.html(wheel_html, height=450)
+    
+    if spin_signal:
+        st.session_state.reveal_winner = True
 
 with col_info:
     st.markdown("### 📝 Instructions")
     st.write("1. Configure items in the sidebar.")
     st.write("2. Click **SPIN** on the wheel.")
-    st.write("3. The winner will be revealed below.")
     
     st.divider()
 
-    if spin_finished:
+    # The Logic Gate: Only show if spin is finished
+    if st.session_state.reveal_winner:
         st.markdown(f"""
-            <div style="text-align: center; background: #1e2129; padding: 20px; border-radius: 15px; border: 2px solid #FFBB00;">
+            <div style="text-align: center; background: #1e2129; padding: 20px; border-radius: 15px; border: 2px solid #FFBB00; animation: fadeIn 0.5s;">
                 <h2 style="color: #FFBB00; margin-bottom: 0;">🎊 WINNER 🎊</h2>
                 <h1 style="color: white; margin-top: 10px; font-size: 45px;">{winner}</h1>
             </div>
+            <style>@keyframes fadeIn {{ from {{ opacity: 0; }} to {{ opacity: 1; }} }}</style>
         """, unsafe_allow_html=True)
         
-        st.write("") # Spacer
+        st.write("") 
         if st.button("🔄 Reset for Next Spin", use_container_width=True):
+            st.session_state.reveal_winner = False
             st.rerun()
     else:
-        st.info("Waiting for spin...")
+        st.info("🎡 The winner will appear here after the wheel stops!")
