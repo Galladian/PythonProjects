@@ -149,7 +149,7 @@ with col_wheel:
 
     wheel_html = f"""
     <div style="display: flex; flex-direction: column; align-items: center; background: #0e1117; padding: 8px 20px 16px 20px; border-radius: 20px;">
-        <div style="width: 0; height: 0; border-left: 22px solid transparent; border-right: 22px solid transparent; border-top: 30px solid #FFBB00; margin-bottom: -15px; z-index: 10;"></div>
+        <div style="width: 0; height: 0; border-left: 22px solid transparent; border-right: 22px solid transparent; border-top: 5px solid #FFBB00; margin-bottom: -15px; z-index: 10;"></div>
         <div id="wheel" style="transition: transform 4s cubic-bezier(0.15, 0, 0.15, 1); transform: rotate(0deg);">
             <svg width="{W}" height="{W}" viewBox="0 0 {W} {W}">{svg_parts}</svg>
         </div>
@@ -185,7 +185,7 @@ with col_info:
 
     if st.session_state.reveal_winner:
         st.markdown(f"""
-            <div style="text-align: center; background: #1e2129; padding: 20px; border-radius: 15px; border: 2px solid #FFBB00;">
+            <div style="text-align: center; background: #1e2129; padding: 5px; border-radius: 15px; border: 2px solid #FFBB00;">
                 <h2 style="color: #FFBB00; margin-bottom: 0;">🎊 WINNER 🎊</h2>
                 <h1 style="color: white; margin-top: 10px; font-size: 55px;">{winner}</h1>
             </div>
