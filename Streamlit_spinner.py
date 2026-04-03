@@ -1,135 +1,137 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import pandas as pd
 import numpy as np
-import time
 
 st.set_page_config(page_title="Executive Spinner", layout="wide")
 
 # --- 1. Initialize Session State ---
 if 'items' not in st.session_state:
     st.session_state['items'] = [{"name": "Pizza", "percent": 50}, {"name": "Tacos", "percent": 50}]
-if 'winner_name' not in st.session_state:
-    st.session_state.winner_name = ""
-if 'target_angle' not in st.session_state:
-    st.session_state.target_angle = 0
-if 'show_result' not in st.session_state:
-    st.session_state.show_result = False
+if 'spin_trigger' not in st.session_state:
+    st.session_state.spin_trigger = 0 # Counter to trigger JS updates
 
 # --- 2. Sidebar Settings ---
 with st.sidebar:
     st.title("⚙️ Settings")
     password = st.text_input("Password", type="password")
     
-    new_data = []
-    total_p = 0
+    # Editable list
     for i, item in enumerate(st.session_state['items']):
         cols = st.columns([2, 1, 0.5])
-        name = cols[0].text_input(f"n{i}", value=item['name'], key=f"n{i}", label_visibility="collapsed")
-        perc = cols[1].number_input(f"p{i}", value=float(item['percent']), key=f"p{i}", label_visibility="collapsed")
-        if cols[2].button("🗑️", key=f"d{i}"):
+        item['name'] = cols[0].text_input(f"Name {i}", value=item['name'], key=f"name_{i}", label_visibility="collapsed")
+        item['percent'] = cols[1].number_input(f"Weight {i}", value=float(item['percent']), key=f"p_{i}", label_visibility="collapsed")
+        if cols[2].button("🗑️", key=f"del_{i}"):
             st.session_state['items'].pop(i)
             st.rerun()
-        new_data.append({"name": name, "percent": perc})
-        total_p += perc
 
     if st.button("➕ Add Item"):
-        st.session_state['items'].append({"name": "New Item", "percent": 0})
+        st.session_state['items'].append({"name": "New Item", "percent": 50})
         st.rerun()
 
+    # Admin Rigging
     manual_rig = None
     if password == "mc2026":
         st.success("Admin Active")
-        manual_rig = st.selectbox("Force Winner?", [None] + [x['name'] for x in new_data])
+        manual_rig = st.selectbox("Force Winner?", [None] + [x['name'] for x in st.session_state['items']])
 
-# --- 3. Improved Logic to Determine Winner ---
-def prepare_spin():
-    # Reset all result-related states immediately
-    st.session_state.show_result = False
-    st.session_state.winner_name = ""
+# --- 3. Rigging Logic ---
+def get_spin_data():
+    items = st.session_state['items']
+    names = [x['name'] for x in items]
+    weights = [x['percent'] for x in items]
+    total_w = sum(weights)
     
-    names = [x['name'] for x in new_data]
-    weights = [x['percent'] for x in new_data]
-    sum_w = sum(weights) if sum(weights) > 0 else 1
-    norm_weights = [w/sum_w for w in weights]
+    # Determine Winner
+    if manual_rig and manual_rig in names:
+        winner = manual_rig
+    else:
+        norm_weights = [w/total_w for w in weights]
+        winner = np.random.choice(names, p=norm_weights)
     
-    winner = manual_rig if manual_rig else np.random.choice(names, p=norm_weights)
-    
+    # Calculate Angle
     idx = names.index(winner)
-    start_deg = sum(norm_weights[:idx]) * 360
-    slice_width = norm_weights[idx] * 360
-    mid_deg = start_deg + (slice_width / 2)
+    # Calculate cumulative start and end angles for the winning slice
+    prev_sum = sum(weights[:idx]) / total_w * 360
+    slice_width = weights[idx] / total_w * 360
     
-    # 270 degrees aligns SVG start with the North pointer
-    st.session_state.target_angle = (270 - mid_deg) + (360 * 5)
-    st.session_state.winner_name = winner
+    # The pointer is at the top (90 deg in CSS circle logic or 0 deg depending on SVG)
+    # To land on the slice, we rotate (360 - center_of_slice)
+    target_slice_mid = prev_sum + (slice_width / 2)
+    final_angle = (360 - target_slice_mid) + (360 * 5) # 5 full spins
+    
+    return winner, int(final_angle)
 
-# --- 4. Build the Visual Wheel ---
-wheel_colors = ["#FF4B4B", "#1C83E1", "#00C781", "#FFBB00", "#7D3CFF", "#FF4B91"]
-svg_elements = ""
-current_angle = 0
+# --- 4. Visual Construction ---
+def build_svg():
+    items = st.session_state['items']
+    total_p = sum(x['percent'] for x in items)
+    wheel_colors = ["#FF4B4B", "#1C83E1", "#00C781", "#FFBB00", "#7D3CFF", "#FF4B91"]
+    
+    svg_elements = ""
+    curr_angle = 0
+    for i, item in enumerate(items):
+        size = (item['percent'] / total_p) * 360
+        color = wheel_colors[i % len(wheel_colors)]
+        
+        # SVG path math
+        rad_start = np.radians(curr_angle)
+        rad_end = np.radians(curr_angle + size)
+        x1, y1 = 150 + 100 * np.cos(rad_start), 150 + 100 * np.sin(rad_start)
+        x2, y2 = 150 + 100 * np.cos(rad_end), 150 + 100 * np.sin(rad_end)
+        
+        large_arc = 1 if size > 180 else 0
+        svg_elements += f'<path d="M150,150 L{x1},{y1} A100,100 0 {large_arc},1 {x2},{y2} Z" fill="{color}" stroke="white" stroke-width="1"/>'
+        
+        # Labels
+        mid_rad = np.radians(curr_angle + size/2)
+        tx, ty = 150 + 70 * np.cos(mid_rad), 150 + 70 * np.sin(mid_rad)
+        rot = curr_angle + size/2
+        svg_elements += f'<text x="{tx}" y="{ty}" fill="white" font-size="10" font-weight="bold" text-anchor="middle" transform="rotate({rot}, {tx}, {ty})">{item["name"]}</text>'
+        
+        curr_angle += size
+    return svg_elements
 
-for i, item in enumerate(new_data):
-    size = (item['percent'] / total_p) * 360 if total_p > 0 else 0
-    color = wheel_colors[i % len(wheel_colors)]
-    
-    x1 = 150 + 100 * np.cos(np.radians(current_angle))
-    y1 = 150 + 100 * np.sin(np.radians(current_angle))
-    x2 = 150 + 100 * np.cos(np.radians(current_angle + size))
-    y2 = 150 + 100 * np.sin(np.radians(current_angle + size))
-    
-    large_arc = 1 if size > 180 else 0
-    svg_elements += f'<path d="M150,150 L{x1},{y1} A100,100 0 {large_arc},1 {x2},{y2} Z" fill="{color}" stroke="#0e1117" stroke-width="2"/>'
-    
-    mid_angle = current_angle + (size / 2)
-    tx, ty = 150 + 65 * np.cos(np.radians(mid_angle)), 150 + 65 * np.sin(np.radians(mid_angle))
-    svg_elements += f'<text x="{tx}" y="{ty}" fill="white" font-size="12" font-weight="bold" text-anchor="middle" alignment-baseline="middle" transform="rotate({mid_angle}, {tx}, {ty})">{item["name"]}</text>'
-    current_angle += size
-
-# --- 5. Display Area ---
-st.title("🎡 Club Decision Wheel")
+# --- 5. Main UI ---
+st.title("🎡 Executive Decision Wheel")
 col_left, col_right = st.columns([1, 1])
 
 with col_left:
-    if st.button("🔄 Reset & Prepare Wheel", use_container_width=True):
-        prepare_spin()
-        st.rerun()
+    winner_name, target_deg = get_spin_data()
+    svg_content = build_svg()
 
+    # The HTML/JS Component
+    # We use a key tied to a counter to force the component to re-render only when we want a "new" spin
     html_code = f"""
-    <div style="display: flex; flex-direction: column; align-items: center; background: #0e1117; padding: 20px;">
-        <div style="width: 0; height: 0; border-left: 15px solid transparent; border-right: 15px solid transparent; border-top: 20px solid #FFBB00; margin-bottom: -10px; z-index: 10;"></div>
-        <div id="wheel-container" style="transition: transform 4s cubic-bezier(0.15, 0, 0.15, 1); transform: rotate(0deg);">
-            <svg width="300" height="300" viewBox="0 0 300 300">{svg_elements}</svg>
+    <div style="display: flex; flex-direction: column; align-items: center; font-family: sans-serif;">
+        <div style="color: #FFBB00; font-size: 30px; margin-bottom: -10px; z-index: 10;">▼</div>
+        <div id="wheel" style="transition: transform 4s cubic-bezier(0.15, 0, 0.15, 1); transform: rotate(0deg);">
+            <svg width="300" height="300" viewBox="0 0 300 300">{svg_content}</svg>
         </div>
-        <button id="spin-btn" style="margin-top: 30px; padding: 15px 40px; background: #FF4B4B; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 18px; font-weight: bold;">CLICK TO SPIN</button>
+        <button id="spin_btn" style="margin-top: 20px; padding: 10px 30px; background: #FF4B4B; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">SPIN WHEEL</button>
     </div>
+
     <script>
-        const btn = document.getElementById('spin-btn');
-        const wheel = document.getElementById('wheel-container');
+        const btn = document.getElementById('spin_btn');
+        const wheel = document.getElementById('wheel');
         btn.onclick = () => {{
-            wheel.style.transform = "rotate({st.session_state.target_angle}deg)";
+            wheel.style.transform = "rotate({target_deg}deg)";
             btn.disabled = true;
-            btn.style.opacity = "0.5";
-            // Wait exactly 4 seconds for the animation to finish
-            setTimeout(() => {{ 
-                window.parent.postMessage({{type: 'streamlit:setComponentValue', value: true}}, '*'); 
-            }}, 4000);
+            setTimeout(() => {{
+                window.parent.postMessage({{type: 'streamlit:setComponentValue', value: '{winner_name}'}}, '*');
+            }}, 4100);
         }};
     </script>
     """
     
-    # components.html returns the value sent by window.parent.postMessage
-    spin_animation_finished = components.html(html_code, height=500)
-    
-    # Update the show_result state ONLY when the JS component sends the signal
-    if spin_animation_finished:
-        st.session_state.show_result = True
+    result = components.html(html_code, height=450, key=f"wheel_{st.session_state.spin_trigger}")
 
 with col_right:
-    # Only show these elements if show_result is True
-    if st.session_state.get('show_result') and st.session_state.winner_name:
+    st.write("### Result")
+    if result:
         st.balloons()
-        st.markdown(f"<h1 style='text-align: center; color: #FFBB00;'>🎊 WINNER 🎊</h1>", unsafe_allow_html=True)
-        st.markdown(f"<h2 style='text-align: center;'>{st.session_state.winner_name}</h2>", unsafe_allow_html=True)
+        st.success(f"The winner is: **{result}**")
+        if st.button("Prepare Next Spin"):
+            st.session_state.spin_trigger += 1
+            st.rerun()
     else:
-        st.info("🎡 The winner will appear here after the spin stops!")
+        st.info("Click the 'SPIN WHEEL' button on the left!")
