@@ -4,7 +4,7 @@ import numpy as np
 
 st.set_page_config(page_title="Executive Spinner", layout="wide")
 
-# --- 1. Helper to reset visibility on any change ---
+# --- 1. Helper to reset visibility ---
 def reset_result():
     st.session_state.reveal_winner = False
 
@@ -27,7 +27,6 @@ with st.sidebar:
     current_items = []
     for i, item in enumerate(st.session_state['items']):
         cols = st.columns([2, 1, 0.5])
-        # Added 'on_change=reset_result' to every input
         name = cols[0].text_input(f"N{i}", value=item['name'], key=f"n_in_{i}", label_visibility="collapsed", on_change=reset_result)
         perc = cols[1].number_input(f"P{i}", value=float(item['percent']), key=f"p_in_{i}", label_visibility="collapsed", on_change=reset_result)
         
@@ -52,7 +51,6 @@ with st.sidebar:
         st.rerun()
 
 # --- 4. Logic: Randomized Landing ---
-# We use a cache-like approach: only calculate a NEW winner if reveal_winner is False
 def get_wheel_data(items_list, rigged_name):
     names = [x['name'] for x in items_list]
     weights = [x['percent'] for x in items_list]
@@ -81,6 +79,7 @@ st.title("🎡 Club Decision Wheel")
 col_wheel, col_info = st.columns([1.2, 0.8])
 
 with col_wheel:
+    # Build SVG
     colors = ["#FF4B4B", "#1C83E1", "#00C781", "#FFBB00", "#7D3CFF", "#FF4B91"]
     total_p = sum(x['percent'] for x in current_items) if sum(x['percent'] for x in current_items) > 0 else 1
     svg_parts = ""
@@ -98,8 +97,6 @@ with col_wheel:
         svg_parts += f'<text x="{tx}" y="{ty}" fill="white" font-size="10" font-weight="bold" text-anchor="middle" transform="rotate({current_angle + sweep/2}, {tx}, {ty})">{item["name"]}</text>'
         current_angle += sweep
 
-    # Create a unique key for the component based on the target angle 
-    # to force the wheel to "reset" its rotation when parameters change.
     wheel_html = f"""
     <div style="display: flex; flex-direction: column; align-items: center; background: #0e1117; padding: 20px; border-radius: 20px;">
         <div style="width: 0; height: 0; border-left: 15px solid transparent; border-right: 15px solid transparent; border-top: 20px solid #FFBB00; margin-bottom: -10px; z-index: 10;"></div>
@@ -116,13 +113,15 @@ with col_wheel:
             btn.disabled = true;
             btn.style.opacity = "0.5";
             setTimeout(() => {{
-                window.parent.postMessage({{type: 'streamlit:setComponentValue', value: '{angle}'}}, '*');
+                window.parent.postMessage({{type: 'streamlit:setComponentValue', value: true}}, '*');
             }}, 4100);
         }};
     </script>
     """
-    # We use the angle as part of the key so the component refreshes when the rig changes
-    spin_signal = components.html(wheel_html, height=450, key=f"wheel_comp_{angle}")
+    
+    # We use st.empty to ensure the wheel can be cleared and re-rendered without a key
+    wheel_placeholder = st.empty()
+    spin_signal = wheel_placeholder.components.html(wheel_html, height=450)
     
     if spin_signal:
         st.session_state.reveal_winner = True
@@ -134,6 +133,7 @@ with col_info:
     
     st.divider()
 
+    # The Logic Gate
     if st.session_state.reveal_winner:
         st.markdown(f"""
             <div style="text-align: center; background: #1e2129; padding: 20px; border-radius: 15px; border: 2px solid #FFBB00;">
@@ -142,6 +142,7 @@ with col_info:
             </div>
         """, unsafe_allow_html=True)
         
+        st.write("") 
         if st.button("🔄 Reset for Next Spin", use_container_width=True):
             reset_result()
             st.rerun()
