@@ -4,25 +4,22 @@ import numpy as np
 
 st.set_page_config(page_title="Executive Spinner", layout="wide")
 
-# --- 1. Global CSS: reduce top padding and hide signal button ---
+# --- Global CSS: reduce top padding ---
 st.markdown("""
 <style>
-/* Remove Streamlit's default top padding so content sits near the top */
 .block-container {
     padding-top: 1rem !important;
 }
-/* Hide the hidden signal button by wrapping div — targeted via JS below */
-#spin-signal-wrapper { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. Helper to reset visibility ---
+# --- Helper to reset state ---
 def reset_result():
     st.session_state.reveal_winner = False
     st.session_state.winner = None
     st.session_state.angle = None
 
-# --- 3. Initialize Session State ---
+# --- Initialize Session State ---
 if 'items' not in st.session_state:
     st.session_state['items'] = [
         {"name": "Pizza", "percent": 50.0},
@@ -37,7 +34,7 @@ if 'winner' not in st.session_state:
 if 'angle' not in st.session_state:
     st.session_state.angle = None
 
-# --- 4. Sidebar Settings ---
+# --- Sidebar ---
 with st.sidebar:
     st.title("⚙️ Settings")
     password = st.text_input("Password", type="password", on_change=reset_result)
@@ -47,7 +44,6 @@ with st.sidebar:
         cols = st.columns([2, 1, 0.5])
         name = cols[0].text_input(f"N{i}", value=item['name'], key=f"n_in_{i}", label_visibility="collapsed", on_change=reset_result)
         perc = cols[1].number_input(f"P{i}", value=float(item['percent']), key=f"p_in_{i}", label_visibility="collapsed", on_change=reset_result)
-
         if cols[2].button("🗑️", key=f"del_{i}"):
             st.session_state['items'].pop(i)
             reset_result()
@@ -64,7 +60,7 @@ with st.sidebar:
         st.success("Admin Active")
         manual_rig = st.selectbox("Force Winner?", [None] + [x['name'] for x in current_items], on_change=reset_result)
 
-# --- 5. Logic: Randomized Landing ---
+# --- Wheel logic ---
 def get_wheel_data(items_list, rigged_name):
     names = [x['name'] for x in items_list]
     weights = [x['percent'] for x in items_list]
@@ -83,10 +79,8 @@ def get_wheel_data(items_list, rigged_name):
     padding = 5
     random_spot = np.random.uniform(start_degree + padding, end_degree - padding)
     total_rotation = (270 - random_spot) + (360 * 5)
-
     return winner_name, int(total_rotation)
 
-# Compute winner once and cache in session state
 if st.session_state.winner is None:
     winner, angle = get_wheel_data(current_items, manual_rig)
     st.session_state.winner = winner
@@ -95,23 +89,37 @@ else:
     winner = st.session_state.winner
     angle = st.session_state.angle
 
-# --- 6. Hidden signal button ---
-# Wrapped in a named div so JS can hide the whole container reliably.
-st.markdown('<div id="spin-signal-wrapper">', unsafe_allow_html=True)
+# --- Hidden signal button ---
+# Injected JS immediately hides this button by scanning for its label text.
+# It runs in the main document (not an iframe) so it reliably finds and hides it.
 signal_clicked = st.button("SPIN_COMPLETE_SIGNAL", key="spin_signal")
-st.markdown('</div>', unsafe_allow_html=True)
-
 if signal_clicked:
     st.session_state.reveal_winner = True
     st.rerun()
 
-# --- 7. Main UI ---
+# This script runs in the main page context and hides the signal button
+components.html("""
+<script>
+(function hideSignalBtn() {
+    const buttons = window.parent.document.querySelectorAll('button');
+    for (const b of buttons) {
+        if (b.innerText.trim() === 'SPIN_COMPLETE_SIGNAL') {
+            b.closest('[data-testid="stButton"]').style.display = 'none';
+            return;
+        }
+    }
+    setTimeout(hideSignalBtn, 50);
+})();
+</script>
+""", height=0)
+
+# --- Main UI ---
 st.title("🎡 Club Decision Wheel")
 col_wheel, col_info = st.columns([1.2, 0.8])
 
 with col_wheel:
     colors = ["#FF4B4B", "#1C83E1", "#00C781", "#FFBB00", "#7D3CFF", "#FF4B91"]
-    total_p = sum(x['percent'] for x in current_items) if sum(x['percent'] for x in current_items) > 0 else 1
+    total_p = sum(x['percent'] for x in current_items) if current_items else 1
     svg_parts = ""
     current_angle = 0
     for i, item in enumerate(current_items):
@@ -154,7 +162,6 @@ with col_wheel:
         }};
     </script>
     """
-
     components.html(wheel_html, height=450)
 
 with col_info:
@@ -178,8 +185,3 @@ with col_info:
             st.rerun()
     else:
         st.info("🎡 The winner will appear here after the wheel stops!")
-
-    st.write("")
-    if st.button("🔄 Reset Wheel", use_container_width=True):
-        reset_result()
-        st.rerun()
