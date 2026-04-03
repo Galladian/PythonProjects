@@ -52,10 +52,6 @@ with st.sidebar:
         st.success("Admin Active")
         manual_rig = st.selectbox("Force Winner?", [None] + [x['name'] for x in current_items], on_change=reset_result)
 
-    if st.button("🔄 Reset Wheel State"):
-        reset_result()
-        st.rerun()
-
 # --- 4. Logic: Randomized Landing ---
 def get_wheel_data(items_list, rigged_name):
     names = [x['name'] for x in items_list]
@@ -87,17 +83,36 @@ else:
     winner = st.session_state.winner
     angle = st.session_state.angle
 
-# --- 5. Hidden signal button (must be rendered BEFORE the html component) ---
-# CSS hides it visually; JS finds it by its label text and clicks it after animation.
+# --- 5. Hidden signal button ---
+# Rendered before the wheel so it exists in the DOM.
+# A data attribute is used to target it specifically with CSS, avoiding hiding other buttons.
 signal_clicked = st.button("SPIN_COMPLETE_SIGNAL", key="spin_signal")
 if signal_clicked:
     st.session_state.reveal_winner = True
     st.rerun()
 
+# Hide ONLY the signal button by targeting its specific Streamlit key via injected CSS
 st.markdown("""
 <style>
-button[kind="secondary"] { display: none; }
+div[data-testid="stButton"]:has(button[kind="secondary"]#spin_signal) { display: none; }
+/* Fallback: hide by button text content via a narrow attribute selector */
 </style>
+""", unsafe_allow_html=True)
+
+# More robust hide: inject a script that finds and hides it once DOM is ready
+st.markdown("""
+<script>
+(function hideSpin() {
+    const all = document.querySelectorAll('button');
+    for (const b of all) {
+        if (b.innerText.trim() === 'SPIN_COMPLETE_SIGNAL') {
+            b.parentElement.style.display = 'none';
+            return;
+        }
+    }
+    setTimeout(hideSpin, 100);
+})();
+</script>
 """, unsafe_allow_html=True)
 
 # --- 6. Main UI Rendering ---
@@ -138,7 +153,6 @@ with col_wheel:
             btn.disabled = true;
             btn.style.opacity = "0.5";
             setTimeout(() => {{
-                // Walk up to the parent Streamlit document and click the hidden signal button
                 const buttons = window.parent.document.querySelectorAll('button');
                 for (const b of buttons) {{
                     if (b.innerText.trim() === 'SPIN_COMPLETE_SIGNAL') {{
@@ -169,8 +183,18 @@ with col_info:
         """, unsafe_allow_html=True)
 
         st.write("")
-        if st.button("🔄 Reset for Next Spin", use_container_width=True):
+        if st.button("🔄 Spin Again", use_container_width=True, type="primary"):
             reset_result()
             st.rerun()
     else:
         st.info("🎡 The winner will appear here after the wheel stops!")
+
+        if st.session_state.reveal_winner is False and st.session_state.winner is not None:
+            # Wheel has been set up but not yet spun — offer a reset anyway
+            pass
+
+    # Always-visible reset at the bottom of the info panel
+    st.write("")
+    if st.button("🔄 Reset Wheel", use_container_width=True):
+        reset_result()
+        st.rerun()
