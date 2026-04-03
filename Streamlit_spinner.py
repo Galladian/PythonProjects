@@ -4,13 +4,25 @@ import numpy as np
 
 st.set_page_config(page_title="Executive Spinner", layout="wide")
 
-# --- 1. Helper to reset visibility ---
+# --- 1. Global CSS: reduce top padding and hide signal button ---
+st.markdown("""
+<style>
+/* Remove Streamlit's default top padding so content sits near the top */
+.block-container {
+    padding-top: 1rem !important;
+}
+/* Hide the hidden signal button by wrapping div — targeted via JS below */
+#spin-signal-wrapper { display: none !important; }
+</style>
+""", unsafe_allow_html=True)
+
+# --- 2. Helper to reset visibility ---
 def reset_result():
     st.session_state.reveal_winner = False
     st.session_state.winner = None
     st.session_state.angle = None
 
-# --- 2. Initialize Session State ---
+# --- 3. Initialize Session State ---
 if 'items' not in st.session_state:
     st.session_state['items'] = [
         {"name": "Pizza", "percent": 50.0},
@@ -25,7 +37,7 @@ if 'winner' not in st.session_state:
 if 'angle' not in st.session_state:
     st.session_state.angle = None
 
-# --- 3. Sidebar Settings ---
+# --- 4. Sidebar Settings ---
 with st.sidebar:
     st.title("⚙️ Settings")
     password = st.text_input("Password", type="password", on_change=reset_result)
@@ -52,7 +64,7 @@ with st.sidebar:
         st.success("Admin Active")
         manual_rig = st.selectbox("Force Winner?", [None] + [x['name'] for x in current_items], on_change=reset_result)
 
-# --- 4. Logic: Randomized Landing ---
+# --- 5. Logic: Randomized Landing ---
 def get_wheel_data(items_list, rigged_name):
     names = [x['name'] for x in items_list]
     weights = [x['percent'] for x in items_list]
@@ -83,39 +95,17 @@ else:
     winner = st.session_state.winner
     angle = st.session_state.angle
 
-# --- 5. Hidden signal button ---
-# Rendered before the wheel so it exists in the DOM.
-# A data attribute is used to target it specifically with CSS, avoiding hiding other buttons.
+# --- 6. Hidden signal button ---
+# Wrapped in a named div so JS can hide the whole container reliably.
+st.markdown('<div id="spin-signal-wrapper">', unsafe_allow_html=True)
 signal_clicked = st.button("SPIN_COMPLETE_SIGNAL", key="spin_signal")
+st.markdown('</div>', unsafe_allow_html=True)
+
 if signal_clicked:
     st.session_state.reveal_winner = True
     st.rerun()
 
-# Hide ONLY the signal button by targeting its specific Streamlit key via injected CSS
-st.markdown("""
-<style>
-div[data-testid="stButton"]:has(button[kind="secondary"]#spin_signal) { display: none; }
-/* Fallback: hide by button text content via a narrow attribute selector */
-</style>
-""", unsafe_allow_html=True)
-
-# More robust hide: inject a script that finds and hides it once DOM is ready
-st.markdown("""
-<script>
-(function hideSpin() {
-    const all = document.querySelectorAll('button');
-    for (const b of all) {
-        if (b.innerText.trim() === 'SPIN_COMPLETE_SIGNAL') {
-            b.parentElement.style.display = 'none';
-            return;
-        }
-    }
-    setTimeout(hideSpin, 100);
-})();
-</script>
-""", unsafe_allow_html=True)
-
-# --- 6. Main UI Rendering ---
+# --- 7. Main UI ---
 st.title("🎡 Club Decision Wheel")
 col_wheel, col_info = st.columns([1.2, 0.8])
 
@@ -189,11 +179,6 @@ with col_info:
     else:
         st.info("🎡 The winner will appear here after the wheel stops!")
 
-        if st.session_state.reveal_winner is False and st.session_state.winner is not None:
-            # Wheel has been set up but not yet spun — offer a reset anyway
-            pass
-
-    # Always-visible reset at the bottom of the info panel
     st.write("")
     if st.button("🔄 Reset Wheel", use_container_width=True):
         reset_result()
