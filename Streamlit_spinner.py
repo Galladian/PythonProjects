@@ -125,7 +125,7 @@ with col_wheel:
     total_p = sum(x['percent'] for x in current_items) if current_items else 1
 
     # Larger wheel: 500x500 viewBox, radius 220, text radius 165
-    W = 500
+    W = 450
     CX, CY = 250, 250
     R = 220
     TR = 165
@@ -144,7 +144,7 @@ with col_wheel:
         mid_rad = np.radians(current_angle + sweep / 2)
         tx, ty = CX + TR * np.cos(mid_rad), CY + TR * np.sin(mid_rad)
         rot = current_angle + sweep / 2
-        svg_parts += f'<text x="{tx}" y="{ty}" fill="white" font-size="16" font-weight="bold" text-anchor="middle" dominant-baseline="middle" transform="rotate({rot},{tx},{ty})">{item["name"]}</text>'
+        svg_parts += f'<text x="{tx}" y="{ty}" fill="white" font-size="20" font-weight="bold" text-anchor="middle" dominant-baseline="middle" transform="rotate({rot},{tx},{ty})">{item["name"]}</text>'
         current_angle += sweep
 
     wheel_html = f"""
@@ -174,7 +174,7 @@ with col_wheel:
         }};
     </script>
     """
-    components.html(wheel_html, height=600)
+    components.html(wheel_html, height=550)
 
 with col_info:
     st.markdown("### 📝 Instructions")
