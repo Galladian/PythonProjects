@@ -7,29 +7,36 @@ st.set_page_config(page_title="Executive Spinner", layout="wide")
 # --- 1. Helper to reset visibility ---
 def reset_result():
     st.session_state.reveal_winner = False
+    st.session_state.winner = None
 
 # --- 2. Initialize Session State ---
 if 'items' not in st.session_state:
     st.session_state['items'] = [
-        {"name": "Pizza", "percent": 50.0}, 
+        {"name": "Pizza", "percent": 50.0},
         {"name": "Tacos", "percent": 50.0},
         {"name": "Pasta", "percent": 50.0},
         {"name": "Chocolate", "percent": 50.0}
     ]
 if 'reveal_winner' not in st.session_state:
     st.session_state.reveal_winner = False
+if 'winner' not in st.session_state:
+    st.session_state.winner = None
+# This counter is the key fix: JS increments it after animation ends,
+# triggering a rerun that reveals the winner.
+if 'spin_count' not in st.session_state:
+    st.session_state.spin_count = 0
 
 # --- 3. Sidebar Settings ---
 with st.sidebar:
     st.title("⚙️ Settings")
     password = st.text_input("Password", type="password", on_change=reset_result)
-    
+
     current_items = []
     for i, item in enumerate(st.session_state['items']):
         cols = st.columns([2, 1, 0.5])
         name = cols[0].text_input(f"N{i}", value=item['name'], key=f"n_in_{i}", label_visibility="collapsed", on_change=reset_result)
         perc = cols[1].number_input(f"P{i}", value=float(item['percent']), key=f"p_in_{i}", label_visibility="collapsed", on_change=reset_result)
-        
+
         if cols[2].button("🗑️", key=f"del_{i}"):
             st.session_state['items'].pop(i)
             reset_result()
@@ -45,7 +52,7 @@ with st.sidebar:
     if password == "mc2026":
         st.success("Admin Active")
         manual_rig = st.selectbox("Force Winner?", [None] + [x['name'] for x in current_items], on_change=reset_result)
-    
+
     if st.button("🔄 Reset Wheel State"):
         reset_result()
         st.rerun()
@@ -55,26 +62,43 @@ def get_wheel_data(items_list, rigged_name):
     names = [x['name'] for x in items_list]
     weights = [x['percent'] for x in items_list]
     total_w = sum(weights) if sum(weights) > 0 else 1
-    
+
     if rigged_name and rigged_name in names:
         winner_name = rigged_name
     else:
-        norm_weights = [w/total_w for w in weights]
+        norm_weights = [w / total_w for w in weights]
         winner_name = np.random.choice(names, p=norm_weights)
-    
+
     winner_idx = names.index(winner_name)
     start_degree = (sum(weights[:winner_idx]) / total_w) * 360
-    end_degree = (sum(weights[:winner_idx+1]) / total_w) * 360
-    
+    end_degree = (sum(weights[:winner_idx + 1]) / total_w) * 360
+
     padding = 5
     random_spot = np.random.uniform(start_degree + padding, end_degree - padding)
     total_rotation = (270 - random_spot) + (360 * 5)
-    
+
     return winner_name, int(total_rotation)
 
-winner, angle = get_wheel_data(current_items, manual_rig)
+# Only compute a new winner when we haven't spun yet (no winner stored).
+# This prevents recomputing on every rerun, which would change the angle mid-animation.
+if st.session_state.winner is None:
+    winner, angle = get_wheel_data(current_items, manual_rig)
+    st.session_state.winner = winner
+    st.session_state.angle = angle
+else:
+    winner = st.session_state.winner
+    angle = st.session_state.angle
 
-# --- 5. Main UI Rendering ---
+# --- 5. Check for spin completion signal via query params ---
+# After the JS animation ends, it reloads the page with ?spun=1 appended.
+params = st.query_params
+if params.get("spun") == "1":
+    st.session_state.reveal_winner = True
+    # Clear the param so subsequent reruns don't re-trigger
+    st.query_params.clear()
+    st.rerun()
+
+# --- 6. Main UI Rendering ---
 st.title("🎡 Club Decision Wheel")
 col_wheel, col_info = st.columns([1.2, 0.8])
 
@@ -91,11 +115,13 @@ with col_wheel:
         x2, y2 = 150 + 100 * np.cos(rad_e), 150 + 100 * np.sin(rad_e)
         large_arc = 1 if sweep > 180 else 0
         svg_parts += f'<path d="M150,150 L{x1},{y1} A100,100 0 {large_arc},1 {x2},{y2} Z" fill="{color}" stroke="white" stroke-width="1"/>'
-        mid_rad = np.radians(current_angle + sweep/2)
+        mid_rad = np.radians(current_angle + sweep / 2)
         tx, ty = 150 + 75 * np.cos(mid_rad), 150 + 75 * np.sin(mid_rad)
-        svg_parts += f'<text x="{tx}" y="{ty}" fill="white" font-size="10" font-weight="bold" text-anchor="middle" transform="rotate({current_angle + sweep/2}, {tx}, {ty})">{item["name"]}</text>'
+        svg_parts += f'<text x="{tx}" y="{ty}" fill="white" font-size="10" font-weight="bold" text-anchor="middle" transform="rotate({current_angle + sweep / 2}, {tx}, {ty})">{item["name"]}</text>'
         current_angle += sweep
 
+    # The JS now signals completion by navigating to ?spun=1, which Streamlit
+    # picks up as a query param change and triggers a clean rerun.
     wheel_html = f"""
     <div style="display: flex; flex-direction: column; align-items: center; background: #0e1117; padding: 20px; border-radius: 20px;">
         <div style="width: 0; height: 0; border-left: 15px solid transparent; border-right: 15px solid transparent; border-top: 20px solid #FFBB00; margin-bottom: -10px; z-index: 10;"></div>
@@ -112,26 +138,22 @@ with col_wheel:
             btn.disabled = true;
             btn.style.opacity = "0.5";
             setTimeout(() => {{
-                window.parent.postMessage({{type: 'streamlit:setComponentValue', value: true}}, '*');
-            }}, 4100);
+                // Navigate the parent Streamlit page to ?spun=1 to signal completion
+                window.parent.location.href = window.parent.location.pathname + "?spun=1";
+            }}, 4200);
         }};
     </script>
     """
-    
-    # Corrected method to call the HTML component
-    spin_signal = components.html(wheel_html, height=450)
-    
-    if spin_signal:
-        st.session_state.reveal_winner = True
+
+    components.html(wheel_html, height=450)
 
 with col_info:
     st.markdown("### 📝 Instructions")
     st.write("1. Configure items in the sidebar.")
     st.write("2. Click **SPIN** on the wheel.")
-    
+
     st.divider()
 
-    # The Logic Gate ensures the winner stays hidden until the signal is received
     if st.session_state.reveal_winner:
         st.markdown(f"""
             <div style="text-align: center; background: #1e2129; padding: 20px; border-radius: 15px; border: 2px solid #FFBB00;">
@@ -139,8 +161,8 @@ with col_info:
                 <h1 style="color: white; margin-top: 10px; font-size: 45px;">{winner}</h1>
             </div>
         """, unsafe_allow_html=True)
-        
-        st.write("") 
+
+        st.write("")
         if st.button("🔄 Reset for Next Spin", use_container_width=True):
             reset_result()
             st.rerun()
