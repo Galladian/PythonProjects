@@ -8,6 +8,7 @@ st.set_page_config(page_title="Executive Spinner", layout="wide")
 def reset_result():
     st.session_state.reveal_winner = False
     st.session_state.winner = None
+    st.session_state.angle = None
 
 # --- 2. Initialize Session State ---
 if 'items' not in st.session_state:
@@ -21,10 +22,8 @@ if 'reveal_winner' not in st.session_state:
     st.session_state.reveal_winner = False
 if 'winner' not in st.session_state:
     st.session_state.winner = None
-# This counter is the key fix: JS increments it after animation ends,
-# triggering a rerun that reveals the winner.
-if 'spin_count' not in st.session_state:
-    st.session_state.spin_count = 0
+if 'angle' not in st.session_state:
+    st.session_state.angle = None
 
 # --- 3. Sidebar Settings ---
 with st.sidebar:
@@ -79,8 +78,7 @@ def get_wheel_data(items_list, rigged_name):
 
     return winner_name, int(total_rotation)
 
-# Only compute a new winner when we haven't spun yet (no winner stored).
-# This prevents recomputing on every rerun, which would change the angle mid-animation.
+# Compute winner once and cache in session state
 if st.session_state.winner is None:
     winner, angle = get_wheel_data(current_items, manual_rig)
     st.session_state.winner = winner
@@ -89,14 +87,18 @@ else:
     winner = st.session_state.winner
     angle = st.session_state.angle
 
-# --- 5. Check for spin completion signal via query params ---
-# After the JS animation ends, it reloads the page with ?spun=1 appended.
-params = st.query_params
-if params.get("spun") == "1":
+# --- 5. Hidden signal button (must be rendered BEFORE the html component) ---
+# CSS hides it visually; JS finds it by its label text and clicks it after animation.
+signal_clicked = st.button("SPIN_COMPLETE_SIGNAL", key="spin_signal")
+if signal_clicked:
     st.session_state.reveal_winner = True
-    # Clear the param so subsequent reruns don't re-trigger
-    st.query_params.clear()
     st.rerun()
+
+st.markdown("""
+<style>
+button[kind="secondary"] { display: none; }
+</style>
+""", unsafe_allow_html=True)
 
 # --- 6. Main UI Rendering ---
 st.title("🎡 Club Decision Wheel")
@@ -120,8 +122,6 @@ with col_wheel:
         svg_parts += f'<text x="{tx}" y="{ty}" fill="white" font-size="10" font-weight="bold" text-anchor="middle" transform="rotate({current_angle + sweep / 2}, {tx}, {ty})">{item["name"]}</text>'
         current_angle += sweep
 
-    # The JS now signals completion by navigating to ?spun=1, which Streamlit
-    # picks up as a query param change and triggers a clean rerun.
     wheel_html = f"""
     <div style="display: flex; flex-direction: column; align-items: center; background: #0e1117; padding: 20px; border-radius: 20px;">
         <div style="width: 0; height: 0; border-left: 15px solid transparent; border-right: 15px solid transparent; border-top: 20px solid #FFBB00; margin-bottom: -10px; z-index: 10;"></div>
@@ -138,8 +138,14 @@ with col_wheel:
             btn.disabled = true;
             btn.style.opacity = "0.5";
             setTimeout(() => {{
-                // Navigate the parent Streamlit page to ?spun=1 to signal completion
-                window.parent.location.href = window.parent.location.pathname + "?spun=1";
+                // Walk up to the parent Streamlit document and click the hidden signal button
+                const buttons = window.parent.document.querySelectorAll('button');
+                for (const b of buttons) {{
+                    if (b.innerText.trim() === 'SPIN_COMPLETE_SIGNAL') {{
+                        b.click();
+                        break;
+                    }}
+                }}
             }}, 4200);
         }};
     </script>
