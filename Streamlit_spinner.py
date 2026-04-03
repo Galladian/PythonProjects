@@ -79,7 +79,6 @@ st.title("🎡 Club Decision Wheel")
 col_wheel, col_info = st.columns([1.2, 0.8])
 
 with col_wheel:
-    # Build SVG
     colors = ["#FF4B4B", "#1C83E1", "#00C781", "#FFBB00", "#7D3CFF", "#FF4B91"]
     total_p = sum(x['percent'] for x in current_items) if sum(x['percent'] for x in current_items) > 0 else 1
     svg_parts = ""
@@ -119,9 +118,8 @@ with col_wheel:
     </script>
     """
     
-    # We use st.empty to ensure the wheel can be cleared and re-rendered without a key
-    wheel_placeholder = st.empty()
-    spin_signal = wheel_placeholder.components.html(wheel_html, height=450)
+    # Corrected method to call the HTML component
+    spin_signal = components.html(wheel_html, height=450)
     
     if spin_signal:
         st.session_state.reveal_winner = True
@@ -133,7 +131,7 @@ with col_info:
     
     st.divider()
 
-    # The Logic Gate
+    # The Logic Gate ensures the winner stays hidden until the signal is received
     if st.session_state.reveal_winner:
         st.markdown(f"""
             <div style="text-align: center; background: #1e2129; padding: 20px; border-radius: 15px; border: 2px solid #FFBB00;">
