@@ -8,7 +8,12 @@ st.set_page_config(page_title="Executive Spinner", layout="wide")
 st.markdown("""
 <style>
 .block-container {
-    padding-top: 1rem !important;
+    padding-top: 0.25rem !important;
+}
+/* Pull the page title up tight */
+h1 {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
 }
 /* Hide the signal button container immediately via CSS before JS even runs */
 div[data-testid="stButton"]:has(> button p) button p {
@@ -143,12 +148,12 @@ with col_wheel:
         current_angle += sweep
 
     wheel_html = f"""
-    <div style="display: flex; flex-direction: column; align-items: center; background: #0e1117; padding: 20px; border-radius: 20px;">
+    <div style="display: flex; flex-direction: column; align-items: center; background: #0e1117; padding: 8px 20px 16px 20px; border-radius: 20px;">
         <div style="width: 0; height: 0; border-left: 22px solid transparent; border-right: 22px solid transparent; border-top: 30px solid #FFBB00; margin-bottom: -15px; z-index: 10;"></div>
         <div id="wheel" style="transition: transform 4s cubic-bezier(0.15, 0, 0.15, 1); transform: rotate(0deg);">
             <svg width="{W}" height="{W}" viewBox="0 0 {W} {W}">{svg_parts}</svg>
         </div>
-        <button id="spin_btn" style="margin-top: 30px; padding: 18px 60px; background: #FF4B4B; color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 24px; font-weight: bold;">SPIN</button>
+        <button id="spin_btn" style="margin-top: 14px; padding: 18px 60px; background: #FF4B4B; color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 24px; font-weight: bold;">SPIN</button>
     </div>
     <script>
         const btn = document.getElementById('spin_btn');
@@ -169,7 +174,7 @@ with col_wheel:
         }};
     </script>
     """
-    components.html(wheel_html, height=620)
+    components.html(wheel_html, height=600)
 
 with col_info:
     st.markdown("### 📝 Instructions")
