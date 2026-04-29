@@ -1,11 +1,11 @@
 [
     {
-        "ticker": "META",
-        "amount": "10.0"
-    },
-    {
         "ticker": "AMD",
         "amount": "25.0"
+    },
+    {
+        "ticker": "META",
+        "amount": "10.0"
     },
     {
         "ticker": "GOOGL",
@@ -20,12 +20,16 @@
         "amount": "200.0"
     },
     {
-        "ticker": "CAKE",
-        "amount": "49.0"
+        "ticker": "SGOV",
+        "amount": "37.0"
     },
     {
         "ticker": "BN",
-        "amount": "52.0"
+        "amount": "70.0"
+    },
+    {
+        "ticker": "CAKE",
+        "amount": "49.0"
     },
     {
         "ticker": "PANW",
@@ -33,11 +37,7 @@
     },
     {
         "ticker": "CRM",
-        "amount": "9.0"
-    },
-    {
-        "ticker": "SLV",
-        "amount": "25.0"
+        "amount": "10.0"
     },
     {
         "ticker": "HIMS",
