@@ -1,50 +1,54 @@
 [
     {
         "ticker": "AMD",
-        "amount": "25.0"
+        "amount": "20.0"
     },
     {
         "ticker": "META",
-        "amount": "10.0"
+        "amount": "11.0"
     },
     {
         "ticker": "GOOGL",
         "amount": "15.0"
     },
     {
+        "ticker": "CAKE",
+        "amount": "65.0"
+    },
+    {
         "ticker": "AMZN",
         "amount": "20.0"
     },
     {
-        "ticker": "SOFI",
-        "amount": "200.0"
-    },
-    {
-        "ticker": "SGOV",
-        "amount": "37.0"
-    },
-    {
-        "ticker": "BN",
-        "amount": "70.0"
-    },
-    {
-        "ticker": "CAKE",
-        "amount": "49.0"
+        "ticker": "NOW",
+        "amount": "40.0"
     },
     {
         "ticker": "PANW",
         "amount": "12.0"
     },
     {
-        "ticker": "CRM",
-        "amount": "10.0"
+        "ticker": "SOFI",
+        "amount": "200.0"
     },
     {
-        "ticker": "HIMS",
-        "amount": "63.0"
+        "ticker": "MELI",
+        "amount": "2.0"
+    },
+    {
+        "ticker": "SGOV",
+        "amount": "35.5"
     },
     {
         "ticker": "ELF",
-        "amount": "15.0"
+        "amount": "30.0"
+    },
+    {
+        "ticker": "CELH",
+        "amount": "65.0"
+    },
+    {
+        "ticker": "HIMS",
+        "amount": "45.0"
     }
 ]
